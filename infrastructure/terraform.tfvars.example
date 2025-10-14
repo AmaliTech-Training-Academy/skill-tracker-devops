@@ -1,0 +1,157 @@
+# =============================================================================
+# Skills Development Tracker (SDT) - Terraform Variables Example
+# =============================================================================
+# Copy this file to envs/<environment>/terraform.tfvars and customize values
+# for your specific environment.
+#
+# Usage:
+#   cp terraform.tfvars.example envs/dev/terraform.tfvars
+#   # Edit envs/dev/terraform.tfvars with your values
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# AWS Configuration
+# -----------------------------------------------------------------------------
+
+# AWS region where resources will be created
+aws_region = "us-east-1"
+
+# -----------------------------------------------------------------------------
+# Network Configuration
+# -----------------------------------------------------------------------------
+
+# VPC CIDR block
+# Dev: 10.0.0.0/16, Staging: 10.1.0.0/16, Production: 10.2.0.0/16
+vpc_cidr = "10.0.0.0/16"
+
+# Public subnet CIDR blocks (for ALB, NAT Gateway)
+public_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
+
+# Private subnet CIDR blocks (for ECS tasks, RDS)
+private_subnet_cidrs = ["10.0.10.0/24", "10.0.11.0/24"]
+
+# Availability zones for multi-AZ deployment
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Enable NAT Gateway for private subnet internet access
+# Set to false for dev to reduce costs (tasks won't have internet access)
+enable_nat_gateway = true
+
+# Enable VPC Flow Logs for network traffic analysis
+# Recommended for staging and production
+enable_vpc_flow_logs = false
+
+# -----------------------------------------------------------------------------
+# Container Configuration
+# -----------------------------------------------------------------------------
+
+# Port on which containers listen
+container_port = 8080
+
+# -----------------------------------------------------------------------------
+# Database Configuration
+# -----------------------------------------------------------------------------
+
+# Database name
+db_name = "sdt_dev"
+
+# Database master username
+db_username = "sdt_admin"
+
+# Note: Database password is auto-generated and stored in AWS Secrets Manager
+
+# -----------------------------------------------------------------------------
+# Security & Access
+# -----------------------------------------------------------------------------
+
+# CORS allowed origins for S3 buckets
+# Use specific domains in staging/production
+cors_allowed_origins = ["*"]
+
+# Email addresses to receive CloudWatch alarm notifications
+alarm_email_endpoints = [
+  # "devops@yourcompany.com",
+  # "alerts@yourcompany.com"
+]
+
+# -----------------------------------------------------------------------------
+# Frontend Configuration (Amplify)
+# -----------------------------------------------------------------------------
+
+# Git repository URL for frontend code
+# Supports GitHub, GitLab, Bitbucket, AWS CodeCommit
+amplify_repository_url = "https://github.com/your-org/sdt-frontend"
+
+# GitHub personal access token for private repositories
+# Create at: https://github.com/settings/tokens
+# Required scopes: repo, admin:repo_hook
+# IMPORTANT: Keep this secret! Do not commit to version control
+github_access_token = ""
+
+# Custom domain name for production (optional)
+# Leave empty for dev/staging or if using default Amplify domain
+custom_domain_name = ""
+
+# -----------------------------------------------------------------------------
+# Feature Flags
+# -----------------------------------------------------------------------------
+
+# Enable AWS X-Ray for distributed tracing
+# Recommended for staging and production
+enable_xray = false
+
+# =============================================================================
+# Environment-Specific Recommendations
+# =============================================================================
+
+# DEV Environment
+# ---------------
+# - enable_nat_gateway = true (needed for pulling images, package installations)
+# - enable_vpc_flow_logs = false
+# - enable_xray = false
+# - alarm_email_endpoints = []
+
+# STAGING Environment
+# -------------------
+# - enable_nat_gateway = true
+# - enable_vpc_flow_logs = true
+# - enable_xray = true
+# - alarm_email_endpoints = ["devops@yourcompany.com"]
+# - cors_allowed_origins = ["https://staging.yourdomain.com"]
+
+# PRODUCTION Environment
+# ----------------------
+# - enable_nat_gateway = true
+# - enable_vpc_flow_logs = true
+# - enable_xray = true
+# - alarm_email_endpoints = ["devops@yourcompany.com", "oncall@yourcompany.com"]
+# - cors_allowed_origins = ["https://yourdomain.com", "https://www.yourdomain.com"]
+# - custom_domain_name = "yourdomain.com"
+
+# =============================================================================
+# Additional Notes
+# =============================================================================
+
+# 1. Database Credentials:
+#    - Passwords are auto-generated and stored in AWS Secrets Manager
+#    - Retrieve with: aws secretsmanager get-secret-value --secret-id <secret-arn>
+
+# 2. Cost Optimization:
+#    - Dev: Disable NAT Gateway if internet access not needed (saves ~$32/month)
+#    - Use smaller instance types in dev (db.t3.micro vs db.r5.large)
+#    - Set shorter backup retention in dev (7 days vs 30 days)
+
+# 3. Security:
+#    - Never commit terraform.tfvars with real values to version control
+#    - Add terraform.tfvars to .gitignore
+#    - Use AWS Secrets Manager or Parameter Store for sensitive values
+#    - Rotate credentials regularly
+
+# 4. Monitoring:
+#    - Subscribe alarm_email_endpoints to receive CloudWatch alarms
+#    - Confirm SNS subscriptions via email after first apply
+
+# 5. Scaling:
+#    - ECS auto-scaling is configured per service in main.tf
+#    - Adjust min_capacity and max_capacity based on load requirements
+#    - Monitor CloudWatch metrics to tune scaling policies
