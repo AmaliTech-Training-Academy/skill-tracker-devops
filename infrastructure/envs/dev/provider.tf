@@ -12,13 +12,13 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket         = "sdt-terraform-state"
-    key            = "envs/dev/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "sdt-dev-locks"
-    encrypt        = true
-  }
+  # backend "s3" {
+  #   bucket         = "sdt-terraform-state"
+  #   key            = "envs/dev/terraform.tfstate"
+  #   region         = "us-east-1"
+  #   dynamodb_table = "sdt-dev-locks"
+  #   encrypt        = true
+  # }
 }
 
 provider "aws" {

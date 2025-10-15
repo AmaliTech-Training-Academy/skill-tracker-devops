@@ -11,9 +11,12 @@ resource "aws_amplify_app" "frontend" {
         preBuild:
           commands:
             - npm ci
+            - echo "Creating .env file with environment variables"
+            - echo "NG_APP_URL=$NG_APP_URL" > .env
+            - cat .env
         build:
           commands:
-            - npm run build --configuration=$AWS_BRANCH
+            - npx ng build
       artifacts:
         baseDirectory: ${var.build_output_directory}
         files:
@@ -24,13 +27,7 @@ resource "aws_amplify_app" "frontend" {
   EOT
 
   # Environment variables
-  dynamic "environment_variables" {
-    for_each = var.environment_variables
-    content {
-      name  = environment_variables.key
-      value = environment_variables.value
-    }
-  }
+  environment_variables = var.environment_variables
 
   # Enable auto branch creation for feature branches
   enable_auto_branch_creation = var.enable_auto_branch_creation
@@ -60,8 +57,8 @@ resource "aws_amplify_app" "frontend" {
   # OAuth token for private repositories
   access_token = var.github_access_token
 
-  # IAM service role
-  iam_service_role_arn = var.iam_service_role_arn
+  # IAM service role (optional)
+  iam_service_role_arn = var.iam_service_role_arn != "" ? var.iam_service_role_arn : null
 
   # Platform
   platform = var.platform

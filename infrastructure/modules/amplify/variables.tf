@@ -88,8 +88,8 @@ variable "custom_rules" {
   }))
   default = [
     {
-      source = "/<*>"
-      status = "404"
+      source = "/**"
+      status = "404-200"
       target = "/index.html"
     }
   ]
@@ -105,6 +105,7 @@ variable "github_access_token" {
 variable "iam_service_role_arn" {
   description = "IAM service role ARN for Amplify"
   type        = string
+  default     = ""
 }
 
 variable "domain_name" {
