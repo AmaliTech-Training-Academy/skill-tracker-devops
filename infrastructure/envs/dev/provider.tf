@@ -12,13 +12,13 @@ terraform {
     }
   }
 
-  # backend "s3" {
-  #   bucket         = "sdt-terraform-state"
-  #   key            = "envs/dev/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   dynamodb_table = "sdt-dev-locks"
-  #   encrypt        = true
-  # }
+  backend "s3" {
+    bucket         = "sdt-terraform-state-601a328f"
+    key            = "envs/dev/terraform.tfstate"
+    region         = "eu-west-1"
+    dynamodb_table = "sdt-terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
@@ -26,7 +26,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "Skills Development Tracker (SDT)"
+      Project     = "Skills Development Tracker"
       Environment = "dev"
       ManagedBy   = "Terraform"
     }

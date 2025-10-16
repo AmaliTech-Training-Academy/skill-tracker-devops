@@ -60,8 +60,8 @@ resource "aws_cloudwatch_dashboard" "rds" {
         type = "metric"
         properties = {
           metrics = [
-            ["AWS/RDS", "CPUUtilization", { stat = "Average", dimensions = { DBInstanceIdentifier = var.rds_instance_id } }],
-            [".", "DatabaseConnections", { stat = "Sum", dimensions = { DBInstanceIdentifier = var.rds_instance_id } }]
+            ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", var.rds_instance_id],
+            ["AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", var.rds_instance_id]
           ]
           period = 300
           stat   = "Average"
@@ -73,8 +73,8 @@ resource "aws_cloudwatch_dashboard" "rds" {
         type = "metric"
         properties = {
           metrics = [
-            ["AWS/RDS", "FreeableMemory", { stat = "Average", dimensions = { DBInstanceIdentifier = var.rds_instance_id } }],
-            [".", "FreeStorageSpace", { stat = "Average", dimensions = { DBInstanceIdentifier = var.rds_instance_id } }]
+            ["AWS/RDS", "FreeableMemory", "DBInstanceIdentifier", var.rds_instance_id],
+            ["AWS/RDS", "FreeStorageSpace", "DBInstanceIdentifier", var.rds_instance_id]
           ]
           period = 300
           stat   = "Average"
@@ -86,8 +86,8 @@ resource "aws_cloudwatch_dashboard" "rds" {
         type = "metric"
         properties = {
           metrics = [
-            ["AWS/RDS", "ReadLatency", { stat = "Average", dimensions = { DBInstanceIdentifier = var.rds_instance_id } }],
-            [".", "WriteLatency", { stat = "Average", dimensions = { DBInstanceIdentifier = var.rds_instance_id } }]
+            ["AWS/RDS", "ReadLatency", "DBInstanceIdentifier", var.rds_instance_id],
+            ["AWS/RDS", "WriteLatency", "DBInstanceIdentifier", var.rds_instance_id]
           ]
           period = 300
           stat   = "Average"

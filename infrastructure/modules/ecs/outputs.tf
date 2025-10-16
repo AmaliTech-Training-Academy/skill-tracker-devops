@@ -40,45 +40,29 @@ output "target_group_arn" {
 
 # ECR Repository URLs
 output "ecr_repository_urls" {
-  description = "Map of ECR repository URLs"
-  value = {
-    auth_service       = aws_ecr_repository.auth_service.repository_url
-    content_service    = aws_ecr_repository.content_service.repository_url
-    submission_service = aws_ecr_repository.submission_service.repository_url
-    sandbox_runner     = aws_ecr_repository.sandbox_runner.repository_url
-  }
+  description = "Map of ECR repository URLs for all services"
+  value       = { for k, v in aws_ecr_repository.services : k => v.repository_url }
 }
 
 # ECR Repository ARNs
 output "ecr_repository_arns" {
-  description = "Map of ECR repository ARNs"
-  value = {
-    auth_service       = aws_ecr_repository.auth_service.arn
-    content_service    = aws_ecr_repository.content_service.arn
-    submission_service = aws_ecr_repository.submission_service.arn
-    sandbox_runner     = aws_ecr_repository.sandbox_runner.arn
-  }
+  description = "Map of ECR repository ARNs for all services"
+  value       = { for k, v in aws_ecr_repository.services : k => v.arn }
 }
 
 # CloudWatch Log Groups
 output "log_groups" {
-  description = "Map of CloudWatch log group names"
-  value = {
-    auth_service       = aws_cloudwatch_log_group.auth_service.name
-    content_service    = aws_cloudwatch_log_group.content_service.name
-    submission_service = aws_cloudwatch_log_group.submission_service.name
-    sandbox_runner     = aws_cloudwatch_log_group.sandbox_runner.name
-    cluster            = aws_cloudwatch_log_group.cluster.name
-  }
+  description = "Map of CloudWatch log group names for all services"
+  value = merge(
+    { for k, v in aws_cloudwatch_log_group.services : k => v.name },
+    { cluster = aws_cloudwatch_log_group.cluster.name }
+  )
 }
 
 output "log_group_arns" {
-  description = "Map of CloudWatch log group ARNs"
-  value = {
-    auth_service       = aws_cloudwatch_log_group.auth_service.arn
-    content_service    = aws_cloudwatch_log_group.content_service.arn
-    submission_service = aws_cloudwatch_log_group.submission_service.arn
-    sandbox_runner     = aws_cloudwatch_log_group.sandbox_runner.arn
-    cluster            = aws_cloudwatch_log_group.cluster.arn
-  }
+  description = "Map of CloudWatch log group ARNs for all services"
+  value = merge(
+    { for k, v in aws_cloudwatch_log_group.services : k => v.arn },
+    { cluster = aws_cloudwatch_log_group.cluster.arn }
+  )
 }

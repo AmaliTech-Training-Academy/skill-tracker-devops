@@ -43,8 +43,9 @@ resource "aws_security_group" "rds" {
 
 # Random password for RDS master user
 resource "random_password" "master" {
-  length  = 32
-  special = true
+  length           = 32
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
 # Store RDS credentials in AWS Secrets Manager
@@ -86,7 +87,7 @@ resource "aws_db_instance" "main" {
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
-  parameter_group_name   = aws_db_parameter_group.main.name
+  # parameter_group_name   = aws_db_parameter_group.main.name  # Using default for now
 
   multi_az               = var.environment == "production" ? true : false
   publicly_accessible    = false

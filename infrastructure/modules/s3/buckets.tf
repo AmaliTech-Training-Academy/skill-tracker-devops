@@ -49,6 +49,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "user_uploads" {
     id     = "expire-old-versions"
     status = "Enabled"
 
+    filter {}
+
     noncurrent_version_expiration {
       noncurrent_days = 90
     }
@@ -57,6 +59,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "user_uploads" {
   rule {
     id     = "transition-to-ia"
     status = "Enabled"
+
+    filter {}
 
     transition {
       days          = 30
@@ -91,7 +95,7 @@ resource "aws_s3_bucket" "static_assets" {
     var.tags,
     {
       Name    = "${var.project_name}-${var.environment}-static-assets"
-      Purpose = "Static assets (images, CSS, JS)"
+      Purpose = "Static assets - images CSS JS"
     }
   )
 }
@@ -177,6 +181,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "app_logs" {
     id     = "expire-old-logs"
     status = "Enabled"
 
+    filter {}
+
     transition {
       days          = 30
       storage_class = "STANDARD_IA"
@@ -188,7 +194,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "app_logs" {
     }
 
     expiration {
-      days = var.logs_retention_days
+      days = 180  # Must be greater than last transition (90 days)
     }
   }
 }

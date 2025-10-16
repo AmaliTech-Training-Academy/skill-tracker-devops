@@ -73,27 +73,40 @@ graph: ## Generate Terraform dependency graph
 # Backend setup commands
 setup-backend: ## Create S3 bucket and DynamoDB table for Terraform state
 	@echo "Setting up Terraform backend for $(ENV) environment..."
-	@aws s3api create-bucket \
-		--bucket sdt-terraform-state \
-		--region us-east-1 || true
-	@aws s3api put-bucket-versioning \
-		--bucket sdt-terraform-state \
-		--versioning-configuration Status=Enabled
-	@aws s3api put-bucket-encryption \
-		--bucket sdt-terraform-state \
-		--server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}'
-	@aws dynamodb create-table \
-		--table-name sdt-$(ENV)-locks \
+	@BUCKET_SUFFIX=$$(openssl rand -hex 4); \
+	BUCKET_NAME="sdt-terraform-state-$$BUCKET_SUFFIX"; \
+	echo "Creating S3 bucket: $$BUCKET_NAME"; \
+	aws s3api create-bucket \
+		--bucket $$BUCKET_NAME \
+		--region eu-west-1 \
+		--create-bucket-configuration LocationConstraint=eu-west-1 && \
+	aws s3api put-bucket-versioning \
+		--bucket $$BUCKET_NAME \
+		--versioning-configuration Status=Enabled \
+		--region eu-west-1 && \
+	aws s3api put-bucket-encryption \
+		--bucket $$BUCKET_NAME \
+		--server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}' \
+		--region eu-west-1 && \
+	echo "Creating DynamoDB table: sdt-terraform-locks" && \
+	aws dynamodb create-table \
+		--table-name sdt-terraform-locks \
 		--attribute-definitions AttributeName=LockID,AttributeType=S \
 		--key-schema AttributeName=LockID,KeyType=HASH \
-		--provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
-		--region us-east-1 || true
-	@echo "Backend setup complete for $(ENV) environment"
+		--billing-mode PAY_PER_REQUEST \
+		--region eu-west-1 && \
+	echo "" && \
+	echo "Backend setup complete!" && \
+	echo "" && \
+	echo "Update your envs/$(ENV)/provider.tf with:" && \
+	echo "  bucket         = \"$$BUCKET_NAME\"" && \
+	echo "  region         = \"eu-west-1\"" && \
+	echo "  dynamodb_table = \"sdt-terraform-locks\""
 
 # ECR login
 ecr-login: ## Login to Amazon ECR
 	@echo "Logging into Amazon ECR..."
-	@aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
+	@aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin $$(aws sts get-caller-identity --query Account --output text).dkr.ecr.eu-west-1.amazonaws.com
 
 # All environments
 init-all: ## Initialize all environments

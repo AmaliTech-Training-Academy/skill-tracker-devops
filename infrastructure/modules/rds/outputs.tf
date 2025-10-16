@@ -44,10 +44,10 @@ output "db_subnet_group_name" {
   value       = aws_db_subnet_group.main.name
 }
 
-output "db_parameter_group_name" {
-  description = "Name of the DB parameter group"
-  value       = aws_db_parameter_group.main.name
-}
+# output "db_parameter_group_name" {
+#   description = "Name of the DB parameter group"
+#   value       = aws_db_parameter_group.main.name
+# }
 
 output "secrets_manager_secret_id" {
   description = "ID of the Secrets Manager secret containing DB credentials"

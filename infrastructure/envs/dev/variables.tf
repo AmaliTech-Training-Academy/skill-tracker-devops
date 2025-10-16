@@ -88,3 +88,9 @@ variable "github_access_token" {
   default     = ""
   sensitive   = true
 }
+
+variable "custom_domain_name" {
+  description = "Custom domain name for Amplify (optional)"
+  type        = string
+  default     = ""
+}
