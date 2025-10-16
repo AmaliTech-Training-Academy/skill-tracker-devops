@@ -48,3 +48,8 @@ terraform.rc
 # Backup files
 *.bak
 *.backup
+
+
+infrastructure/BACKEND_DEPLOYMENT_GUIDE.md
+infrastructure/MICROSERVICES_SETUP.md
+infrastructure/SERVICE_PORTS_REFERENCE.md
