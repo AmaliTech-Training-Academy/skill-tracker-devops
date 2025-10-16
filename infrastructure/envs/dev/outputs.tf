@@ -42,16 +42,15 @@ output "s3_buckets" {
   }
 }
 
-# Amplify outputs - commented out for backend-only deployment
-# output "amplify_app_url" {
-#   description = "URL of the Amplify app"
-#   value       = module.amplify.app_url
-# }
+output "api_gateway_url" {
+  description = "URL of the API Gateway"
+  value       = module.api_gateway.api_gateway_url
+}
 
-# output "amplify_default_domain" {
-#   description = "Default domain of the Amplify app"
-#   value       = module.amplify.default_domain
-# }
+output "amplify_app_url" {
+  description = "URL of the Amplify app"
+  value       = module.amplify.app_url
+}
 
 output "cloudwatch_log_groups" {
   description = "Map of CloudWatch log group names"
