@@ -213,6 +213,17 @@ module "monitoring" {
   tags = local.common_tags
 }
 
+# API Gateway Module
+module "api_gateway" {
+  source = "../../modules/api-gateway"
+
+  project_name = local.project_name
+  environment  = local.environment
+  alb_dns_name = module.ecs.alb_dns_name
+
+  tags = local.common_tags
+}
+
 # Amplify Module
 module "amplify" {
   source = "../../modules/amplify"
@@ -226,7 +237,7 @@ module "amplify" {
   build_output_directory = "dist/SkillBoost/browser"
 
   environment_variables = {
-    NG_APP_URL  = "http://sdt-dev-alb-1593909218.eu-west-1.elb.amazonaws.com"
+    NG_APP_URL  = module.api_gateway.api_gateway_url
     ENVIRONMENT = local.environment
   }
 
