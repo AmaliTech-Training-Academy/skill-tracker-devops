@@ -244,7 +244,7 @@ module "amplify" {
   enable_auto_branch_creation   = true
   enable_branch_auto_build      = true
   enable_branch_auto_deletion   = true
-  auto_branch_creation_patterns = ["feature/*", "dev/*"]
+  auto_branch_creation_patterns = []
 
   github_access_token = var.github_access_token
 
