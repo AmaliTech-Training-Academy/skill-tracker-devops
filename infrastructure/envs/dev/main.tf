@@ -213,6 +213,46 @@ module "monitoring" {
   tags = local.common_tags
 }
 
+# EFS Module - Persistent storage for data services
+module "efs" {
+  source = "../../modules/efs"
+
+  project_name           = local.project_name
+  environment            = local.environment
+  vpc_id                 = module.networking.vpc_id
+  private_subnet_ids     = module.networking.private_subnet_ids
+  ecs_security_group_id  = module.ecs.ecs_tasks_security_group_id
+
+  tags = local.common_tags
+}
+
+# Data Services Module - MongoDB, Redis, RabbitMQ
+module "data_services" {
+  source = "../../modules/data-services"
+
+  project_name               = local.project_name
+  environment                = local.environment
+  vpc_id                     = module.networking.vpc_id
+  private_subnet_ids         = module.networking.private_subnet_ids
+  ecs_cluster_id             = module.ecs.cluster_id
+  ecs_security_group_id      = module.ecs.ecs_tasks_security_group_id
+  ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
+  ecs_task_role_arn          = module.iam.ecs_task_role_arn
+
+  # EFS configuration
+  efs_file_system_id      = module.efs.file_system_id
+  mongodb_access_point_id = module.efs.mongodb_access_point_id
+  redis_access_point_id   = module.efs.redis_access_point_id
+  rabbitmq_access_point_id = module.efs.rabbitmq_access_point_id
+
+  aws_region          = var.aws_region
+  log_retention_days  = 30
+
+  tags = local.common_tags
+
+  depends_on = [module.efs]
+}
+
 # API Gateway Module
 module "api_gateway" {
   source = "../../modules/api-gateway"
@@ -224,7 +264,7 @@ module "api_gateway" {
   tags = local.common_tags
 }
 
-# Amplify Module
+# Amplify Module - Frontend (handled by colleague)
 module "amplify" {
   source = "../../modules/amplify"
 
