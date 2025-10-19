@@ -1,0 +1,84 @@
+infrastructure/
+├── .gitignore
+├── ARCHITECTURE.md
+├── DEPLOYMENT_CHECKLIST.md
+├── Makefile
+├── PROJECT_SUMMARY.md
+├── QUICK_START.md
+├── README.md
+├── terraform.tfvars.example
+│
+├── envs/
+│   ├── dev/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   ├── provider.tf
+│   │   └── variables.tf
+│   │
+│   ├── staging/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   ├── provider.tf
+│   │   └── variables.tf
+│   │
+│   └── production/
+│       ├── main.tf
+│       ├── outputs.tf
+│       ├── provider.tf
+│       └── variables.tf
+│
+├── modules/
+│   ├── amplify/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── ecs/
+│   │   ├── cluster.tf
+│   │   ├── ecr.tf
+│   │   ├── logs.tf
+│   │   ├── outputs.tf
+│   │   ├── task_roles.tf
+│   │   └── variables.tf
+│   │
+│   ├── iam/
+│   │   ├── outputs.tf
+│   │   ├── policies.tf
+│   │   ├── roles.tf
+│   │   └── variables.tf
+│   │
+│   ├── monitoring/
+│   │   ├── alarms.tf
+│   │   ├── cloudwatch.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── networking/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── rds/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   ├── parameter_groups.tf
+│   │   └── variables.tf
+│   │
+│   └── s3/
+│       ├── buckets.tf
+│       ├── outputs.tf
+│       └── variables.tf
+│
+└── scripts/
+    └── setup.sh
+
+Total Structure:
+- 7 Documentation files
+- 8 Terraform modules (30 module files)
+- 3 Environment configurations (12 files)
+- 1 Makefile
+- 1 Setup script
+- 1 .gitignore
+- 1 Example configuration
+
+Total: 53 files
