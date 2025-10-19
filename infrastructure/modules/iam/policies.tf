@@ -143,3 +143,32 @@ resource "aws_iam_role_policy_attachment" "ecs_task_xray" {
   role       = aws_iam_role.ecs_task.name
   policy_arn = aws_iam_policy.ecs_xray_access[0].arn
 }
+
+# EFS Access Policy for ECS Tasks
+resource "aws_iam_policy" "ecs_efs_access" {
+  name        = "${var.project_name}-${var.environment}-ecs-efs-access"
+  description = "Allow ECS tasks to mount and access EFS file systems"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticfilesystem:ClientMount",
+          "elasticfilesystem:ClientWrite",
+          "elasticfilesystem:ClientRootAccess"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
+# Attach EFS policy to ECS task role
+resource "aws_iam_role_policy_attachment" "ecs_task_efs" {
+  role       = aws_iam_role.ecs_task.name
+  policy_arn = aws_iam_policy.ecs_efs_access.arn
+}

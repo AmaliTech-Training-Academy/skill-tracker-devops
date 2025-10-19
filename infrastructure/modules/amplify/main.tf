@@ -54,8 +54,8 @@ resource "aws_amplify_app" "frontend" {
     }
   }
 
-  # OAuth token for private repositories
-  access_token = var.github_access_token
+  # OAuth token for private repositories (only if provided)
+  access_token = var.github_access_token != "" ? var.github_access_token : null
 
   # IAM service role (optional)
   iam_service_role_arn = var.iam_service_role_arn != "" ? var.iam_service_role_arn : null

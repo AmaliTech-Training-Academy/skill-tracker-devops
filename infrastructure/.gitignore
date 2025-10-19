@@ -53,3 +53,4 @@ terraform.rc
 infrastructure/BACKEND_DEPLOYMENT_GUIDE.md
 infrastructure/MICROSERVICES_SETUP.md
 infrastructure/SERVICE_PORTS_REFERENCE.md
+infrastructure/DATA_SERVICES_SETUP.md
