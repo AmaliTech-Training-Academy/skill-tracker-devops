@@ -54,3 +54,7 @@ infrastructure/BACKEND_DEPLOYMENT_GUIDE.md
 infrastructure/MICROSERVICES_SETUP.md
 infrastructure/SERVICE_PORTS_REFERENCE.md
 infrastructure/DATA_SERVICES_SETUP.md
+FIX_AND_APPLY.sh
+FIX_STATE_ISSUE.md
+cleanup-existing-iam.sh
+import-existing-iam.sh
