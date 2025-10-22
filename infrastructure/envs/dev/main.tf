@@ -278,6 +278,42 @@ module "amplify" {
   platform               = "WEB"
   build_output_directory = "dist/SkillBoost/browser"
 
+  # Custom build spec with SPA redirect
+  build_spec = <<-EOT
+    version: 1
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm install
+            - echo "Creating .env file with environment variables"
+            - echo "NG_APP_URL=$NG_APP_URL" > .env
+            - cat .env
+        build:
+          commands:
+            - npx ng build
+        postBuild:
+          commands:
+            - |
+              cat > dist/SkillBoost/browser/_redirects << 'EOF'
+              /signup /index.html 200
+              /signup/ /index.html 200
+              /login /index.html 200
+              /login/ /index.html 200
+              /dashboard /index.html 200
+              /dashboard/ /index.html 200
+              /dashboard/* /index.html 200
+              /* /index.html 200
+              EOF
+      artifacts:
+        baseDirectory: dist/SkillBoost/browser
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+  EOT
+
   environment_variables = {
     NG_APP_URL  = module.api_gateway.api_gateway_url
     ENVIRONMENT = local.environment
@@ -287,6 +323,50 @@ module "amplify" {
   enable_branch_auto_build      = true
   enable_branch_auto_deletion   = true
   auto_branch_creation_patterns = ["dev"]
+
+  # SPA redirect rules for Angular routing
+  custom_rules = [
+    {
+      source = "/signup"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/signup/"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/login"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/login/"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/dashboard"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/dashboard/"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/dashboard/*"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/<*>"
+      status = "404"
+      target = "/index.html"
+    }
+  ]
 
   github_access_token = var.github_access_token
 
