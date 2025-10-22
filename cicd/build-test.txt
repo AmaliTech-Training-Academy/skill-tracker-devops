@@ -1,0 +1,339 @@
+name: CI - Build & Test
+
+on:
+  pull_request:
+    branches: [dev, staging, main]
+  push:
+    branches: [dev]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/skilltracker
+
+jobs:
+  # ============================================================
+  # Job 1: Build & Test Common Modules
+  # ============================================================
+  build-common:
+    name: Build Common Modules
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build Parent POM
+        run: mvn install -N -DskipTests
+
+      - name: Build common-util
+        run: |
+          cd skilltracker-common/common-util
+          mvn clean install -DskipTests
+
+      - name: Build common-security
+        run: |
+          cd skilltracker-common/common-security
+          mvn clean install -DskipTests
+
+      - name: Cache Maven artifacts
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+  # ============================================================
+  # Job 2: Build Infrastructure Services
+  # ============================================================
+  build-infrastructure:
+    name: Build Infrastructure
+    runs-on: ubuntu-latest
+    needs: build-common
+    strategy:
+      matrix:
+        service: [discovery-server, config-server, api-gateway]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Restore Maven cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build Parent & Common modules
+        run: |
+          mvn install -N -DskipTests
+          cd skilltracker-common/common-util && mvn clean install -DskipTests
+          cd ../common-security && mvn clean install -DskipTests
+
+      - name: Build ${{ matrix.service }}
+        run: |
+          cd skilltracker-infra/${{ matrix.service }}
+          mvn clean package -DskipTests
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.service }}-jar
+          path: skilltracker-infra/${{ matrix.service }}/target/*.jar
+          retention-days: 1
+
+  # ============================================================
+  # Job 3: Build Business Services
+  # ============================================================
+  build-services:
+    name: Build Services
+    runs-on: ubuntu-latest
+    needs: build-common
+    strategy:
+      matrix:
+        service: 
+          - user-service
+          - task-service
+          - feedback-service
+          - payment-service
+          - practice-service
+          - analytics-service
+          - gamification-service
+          - notification-service
+          - bff-service
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Restore Maven cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build Parent & Common modules
+        run: |
+          mvn install -N -DskipTests
+          cd skilltracker-common/common-util && mvn clean install -DskipTests
+          cd ../common-security && mvn clean install -DskipTests
+
+      - name: Build ${{ matrix.service }}
+        run: |
+          cd skilltracker-services/${{ matrix.service }}
+          mvn clean package -DskipTests
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.service }}-jar
+          path: skilltracker-services/${{ matrix.service }}/target/*.jar
+          retention-days: 1
+
+  # ============================================================
+  # Job 4: Run Unit Tests
+  # ============================================================
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: build-common
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build dependencies
+        run: |
+          mvn install -N -DskipTests
+          cd skilltracker-common/common-util && mvn clean install -DskipTests
+          cd ../common-security && mvn clean install -DskipTests
+
+      - name: Run tests
+        run: mvn test -B
+
+      - name: Generate test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Maven Test Results
+          path: '**/target/surefire-reports/*.xml'
+          reporter: java-junit
+
+  # ============================================================
+  # Job 5: Integration Tests
+  # ============================================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build-infrastructure, build-services]
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: skilltracker_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmqctl status"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize PostgreSQL schemas
+        run: |
+          PGPASSWORD=postgres123 psql -h localhost -U postgres -d skilltracker_db -f docker/postgres/init-schemas.sql
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test images
+        run: |
+          docker compose -f docker-compose.ecs-test.yml build
+
+      - name: Run integration tests
+        run: |
+          docker compose -f docker-compose.ecs-test.yml up -d
+          sleep 60
+          ./scripts/health-check.sh || true
+        env:
+          POSTGRES_DB: skilltracker_db
+          POSTGRES_PASSWORD: postgres123
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.ecs-test.yml logs > integration-test-logs.txt
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: integration-test-logs
+          path: integration-test-logs.txt
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker-compose.ecs-test.yml down -v
+
+  # ============================================================
+  # Job 6: Security Scan
+  # ============================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-common
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ============================================================
+  # Job 7: Code Quality
+  # ============================================================
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: SonarCloud Scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -Dsonar.projectKey=skilltracker-backend
+        continue-on-error: true
+

@@ -18,6 +18,7 @@ jobs:
       target_branch: ${{ github.event.client_payload.target_branch }}
       commit_sha: ${{ github.event.client_payload.commit_sha }}
       enable_ecs_deploy: ${{ github.event.client_payload.enable_ecs_deploy || true }}
+      force_full_build: ${{ github.event.client_payload.force_full_build || false }}
     secrets:
       BACKEND_REPO_NAME: ${{ secrets.BACKEND_REPO_NAME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

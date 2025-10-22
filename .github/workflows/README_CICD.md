@@ -141,18 +141,20 @@ This workflow is designed to:
 
 1. **Run in:** DevOps repository (`skill-tracker-devops`)
 2. **Build from:** Backend repository (contains microservices code)
-3. **Deploy to:** AWS ECS cluster
 
 **The workflow checks out the backend repository** using the `repo_name` input parameter.
 
 ---
 
-### **Required GitHub Secrets**
+### Manual override: Force full build/deploy
 
-Set these in your DevOps repository:
+You can manually force a full rebuild and redeploy of all services regardless of changes detected.
 
-```bash
-# AWS Credentials
+- **Input on reusable workflow:** `force_full_build: boolean` (default: `false`)
+- **Behavior when true:**
+  - Builds all images (infra + business)
+  - Deploys infra (ordered) and all business services
+  - Health check and notifications still run
 AWS_ACCESS_KEY_ID=<your-access-key>
 AWS_SECRET_ACCESS_KEY=<your-secret-key>
 AWS_REGION=eu-west-1
