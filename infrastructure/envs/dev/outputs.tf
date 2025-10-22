@@ -66,32 +66,33 @@ output "monitoring_dashboards" {
 }
 
 # Data Services Outputs
-output "mongodb_endpoint" {
-  description = "MongoDB service DNS name"
-  value       = module.data_services.mongodb_service_name
-}
-
-output "redis_endpoint" {
-  description = "Redis service DNS name"
-  value       = module.data_services.redis_service_name
-}
-
-output "rabbitmq_endpoint" {
-  description = "RabbitMQ service DNS name"
-  value       = module.data_services.rabbitmq_service_name
-}
-
-output "mongodb_secret_arn" {
-  description = "ARN of MongoDB credentials secret"
-  value       = module.data_services.mongodb_secret_arn
-}
-
-output "rabbitmq_secret_arn" {
-  description = "ARN of RabbitMQ credentials secret"
-  value       = module.data_services.rabbitmq_secret_arn
-}
-
-output "efs_file_system_id" {
-  description = "ID of the EFS file system"
-  value       = module.efs.file_system_id
-}
+# TODO: Uncomment when data_services and efs modules are created
+# output "mongodb_endpoint" {
+#   description = "MongoDB service DNS name"
+#   value       = module.data_services.mongodb_service_name
+# }
+#
+# output "redis_endpoint" {
+#   description = "Redis service DNS name"
+#   value       = module.data_services.redis_service_name
+# }
+#
+# output "rabbitmq_endpoint" {
+#   description = "RabbitMQ service DNS name"
+#   value       = module.data_services.rabbitmq_service_name
+# }
+#
+# output "mongodb_secret_arn" {
+#   description = "ARN of MongoDB credentials secret"
+#   value       = module.data_services.mongodb_secret_arn
+# }
+#
+# output "rabbitmq_secret_arn" {
+#   description = "ARN of RabbitMQ credentials secret"
+#   value       = module.data_services.rabbitmq_secret_arn
+# }
+#
+# output "efs_file_system_id" {
+#   description = "ID of the EFS file system"
+#   value       = module.efs.file_system_id
+# }

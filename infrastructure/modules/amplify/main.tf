@@ -10,7 +10,7 @@ resource "aws_amplify_app" "frontend" {
       phases:
         preBuild:
           commands:
-            - npm ci
+            - npm install
             - echo "Creating .env file with environment variables"
             - echo "NG_APP_URL=$NG_APP_URL" > .env
             - cat .env

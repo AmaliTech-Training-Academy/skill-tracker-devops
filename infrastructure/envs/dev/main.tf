@@ -214,44 +214,46 @@ module "monitoring" {
 }
 
 # EFS Module - Persistent storage for data services
-module "efs" {
-  source = "../../modules/efs"
-
-  project_name           = local.project_name
-  environment            = local.environment
-  vpc_id                 = module.networking.vpc_id
-  private_subnet_ids     = module.networking.private_subnet_ids
-  ecs_security_group_id  = module.ecs.ecs_tasks_security_group_id
-
-  tags = local.common_tags
-}
+# TODO: Create EFS module before uncommenting
+# module "efs" {
+#   source = "../../modules/efs"
+#
+#   project_name           = local.project_name
+#   environment            = local.environment
+#   vpc_id                 = module.networking.vpc_id
+#   private_subnet_ids     = module.networking.private_subnet_ids
+#   ecs_security_group_id  = module.ecs.ecs_tasks_security_group_id
+#
+#   tags = local.common_tags
+# }
 
 # Data Services Module - MongoDB, Redis, RabbitMQ
-module "data_services" {
-  source = "../../modules/data-services"
-
-  project_name               = local.project_name
-  environment                = local.environment
-  vpc_id                     = module.networking.vpc_id
-  private_subnet_ids         = module.networking.private_subnet_ids
-  ecs_cluster_id             = module.ecs.cluster_id
-  ecs_security_group_id      = module.ecs.ecs_tasks_security_group_id
-  ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
-  ecs_task_role_arn          = module.iam.ecs_task_role_arn
-
-  # EFS configuration
-  efs_file_system_id      = module.efs.file_system_id
-  mongodb_access_point_id = module.efs.mongodb_access_point_id
-  redis_access_point_id   = module.efs.redis_access_point_id
-  rabbitmq_access_point_id = module.efs.rabbitmq_access_point_id
-
-  aws_region          = var.aws_region
-  log_retention_days  = 30
-
-  tags = local.common_tags
-
-  depends_on = [module.efs]
-}
+# TODO: Create data-services module before uncommenting
+# module "data_services" {
+#   source = "../../modules/data-services"
+#
+#   project_name               = local.project_name
+#   environment                = local.environment
+#   vpc_id                     = module.networking.vpc_id
+#   private_subnet_ids         = module.networking.private_subnet_ids
+#   ecs_cluster_id             = module.ecs.cluster_id
+#   ecs_security_group_id      = module.ecs.ecs_tasks_security_group_id
+#   ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
+#   ecs_task_role_arn          = module.iam.ecs_task_role_arn
+#
+#   # EFS configuration
+#   efs_file_system_id      = module.efs.file_system_id
+#   mongodb_access_point_id = module.efs.mongodb_access_point_id
+#   redis_access_point_id   = module.efs.redis_access_point_id
+#   rabbitmq_access_point_id = module.efs.rabbitmq_access_point_id
+#
+#   aws_region          = var.aws_region
+#   log_retention_days  = 30
+#
+#   tags = local.common_tags
+#
+#   depends_on = [module.efs]
+# }
 
 # API Gateway Module
 module "api_gateway" {
@@ -276,6 +278,42 @@ module "amplify" {
   platform               = "WEB"
   build_output_directory = "dist/SkillBoost/browser"
 
+  # Custom build spec with SPA redirect
+  build_spec = <<-EOT
+    version: 1
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm install
+            - echo "Creating .env file with environment variables"
+            - echo "NG_APP_URL=$NG_APP_URL" > .env
+            - cat .env
+        build:
+          commands:
+            - npx ng build
+        postBuild:
+          commands:
+            - |
+              cat > dist/SkillBoost/browser/_redirects << 'EOF'
+              /signup /index.html 200
+              /signup/ /index.html 200
+              /login /index.html 200
+              /login/ /index.html 200
+              /dashboard /index.html 200
+              /dashboard/ /index.html 200
+              /dashboard/* /index.html 200
+              /* /index.html 200
+              EOF
+      artifacts:
+        baseDirectory: dist/SkillBoost/browser
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+  EOT
+
   environment_variables = {
     NG_APP_URL  = module.api_gateway.api_gateway_url
     ENVIRONMENT = local.environment
@@ -284,7 +322,51 @@ module "amplify" {
   enable_auto_branch_creation   = true
   enable_branch_auto_build      = true
   enable_branch_auto_deletion   = true
-  auto_branch_creation_patterns = []
+  auto_branch_creation_patterns = ["dev"]
+
+  # SPA redirect rules for Angular routing
+  custom_rules = [
+    {
+      source = "/signup"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/signup/"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/login"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/login/"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/dashboard"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/dashboard/"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/dashboard/*"
+      status = "200"
+      target = "/index.html"
+    },
+    {
+      source = "/<*>"
+      status = "404"
+      target = "/index.html"
+    }
+  ]
 
   github_access_token = var.github_access_token
 
