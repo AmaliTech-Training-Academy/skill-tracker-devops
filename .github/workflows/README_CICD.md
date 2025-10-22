@@ -135,6 +135,18 @@ DevOps Repository
 
 ## 🔧 Configuration
 
+### ⚠️ **Important: Repository Setup**
+
+This workflow is designed to:
+
+1. **Run in:** DevOps repository (`skill-tracker-devops`)
+2. **Build from:** Backend repository (contains microservices code)
+3. **Deploy to:** AWS ECS cluster
+
+**The workflow checks out the backend repository** using the `repo_name` input parameter.
+
+---
+
 ### **Required GitHub Secrets**
 
 Set these in your DevOps repository:
@@ -169,7 +181,6 @@ ECR_REPOSITORY_PREFIX: sdt/dev
 ```
 
 ---
-
 
 ## 📊 Workflow Execution Flow
 
@@ -354,4 +365,3 @@ docker build -f ./skilltracker-services/user-service/Dockerfile .
    ```
 3. Ensure secrets are accessible
 4. Verify VPC networking
-
