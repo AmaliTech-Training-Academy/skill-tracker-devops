@@ -248,6 +248,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: Deploy infra sequentially
         run: |
           set -euo pipefail
@@ -256,8 +261,20 @@ jobs:
             SERVICE_NAME="$1"
             echo "=== Deploying $SERVICE_NAME ==="
 
+            # Resolve current task definition ARN from the service (avoids assumptions about family name)
+            TASK_DEF_ARN=$(aws ecs describe-services \
+              --cluster sdt-dev-cluster \
+              --services sdt-dev-${SERVICE_NAME} \
+              --query 'services[0].taskDefinition' \
+              --output text || true)
+
+            if [ -z "$TASK_DEF_ARN" ] || [ "$TASK_DEF_ARN" = "None" ]; then
+              echo "Service sdt-dev-${SERVICE_NAME} not found or has no taskDefinition. Skipping."
+              return 0
+            fi
+
             TASK_DEF=$(aws ecs describe-task-definition \
-              --task-definition sdt-dev-${SERVICE_NAME} \
+              --task-definition "$TASK_DEF_ARN" \
               --query 'taskDefinition' \
               --output json)
 
