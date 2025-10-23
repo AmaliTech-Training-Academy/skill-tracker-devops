@@ -43,11 +43,14 @@ resource "aws_ecs_task_definition" "service" {
         }
       },
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:${each.value.port}/actuator/health || exit 1"],
+        command     = [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:${each.value.port}/actuator/health >/dev/null 2>&1 || curl -sf http://localhost:${each.value.port}/actuator/health || exit 1"
+        ],
         interval    = 30,
         timeout     = 5,
         retries     = 3,
-        startPeriod = 60
+        startPeriod = 120
       }
     }
   ])

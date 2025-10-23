@@ -376,6 +376,36 @@ jobs:
               --force-new-deployment \
               --no-cli-pager
 
+            echo "Recent ECS service events for $SERVICE_NAME:"
+            aws ecs describe-services \
+              --cluster sdt-dev-cluster \
+              --services sdt-dev-${SERVICE_NAME} \
+              --query 'services[0].events[0:10].[createdAt,message]' \
+              --output table || true
+
+            echo "Describe latest tasks for $SERVICE_NAME:"
+            TASK_ARNS=$(aws ecs list-tasks \
+              --cluster sdt-dev-cluster \
+              --service-name sdt-dev-${SERVICE_NAME} \
+              --desired-status RUNNING \
+              --output text --query 'taskArns')
+            if [ -z "$TASK_ARNS" ]; then
+              TASK_ARNS=$(aws ecs list-tasks \
+                --cluster sdt-dev-cluster \
+                --service-name sdt-dev-${SERVICE_NAME} \
+                --desired-status STOPPED \
+                --output text --query 'taskArns[0:5]')
+            fi
+            if [ -n "$TASK_ARNS" ]; then
+              aws ecs describe-tasks \
+                --cluster sdt-dev-cluster \
+                --tasks $TASK_ARNS \
+                --query 'tasks[].{last:lastStatus,desired:desiredStatus,stopped:stoppedReason,containers:containers[].reason}' \
+                --output json || true
+            else
+              echo "No tasks found yet for $SERVICE_NAME."
+            fi
+
             echo "Waiting for $SERVICE_NAME to stabilize..."
             aws ecs wait services-stable \
               --cluster sdt-dev-cluster \
@@ -535,6 +565,38 @@ jobs:
             --task-definition ${{ steps.update-task-def.outputs.task-arn }} \
             --force-new-deployment \
             --no-cli-pager
+
+      - name: Show recent ECS service events
+        run: |
+          aws ecs describe-services \
+            --cluster sdt-dev-cluster \
+            --services sdt-dev-${{ matrix.service.name }} \
+            --query 'services[0].events[0:10].[createdAt,message]' \
+            --output table || true
+
+      - name: Describe latest tasks and stopped reasons
+        run: |
+          TASK_ARNS=$(aws ecs list-tasks \
+            --cluster sdt-dev-cluster \
+            --service-name sdt-dev-${{ matrix.service.name }} \
+            --desired-status RUNNING \
+            --output text --query 'taskArns')
+          if [ -z "$TASK_ARNS" ]; then
+            TASK_ARNS=$(aws ecs list-tasks \
+              --cluster sdt-dev-cluster \
+              --service-name sdt-dev-${{ matrix.service.name }} \
+              --desired-status STOPPED \
+              --output text --query 'taskArns[0:5]')
+          fi
+          if [ -n "$TASK_ARNS" ]; then
+            aws ecs describe-tasks \
+              --cluster sdt-dev-cluster \
+              --tasks $TASK_ARNS \
+              --query 'tasks[].{last:lastStatus,desired:desiredStatus,stopped:stoppedReason,containers:containers[].reason}' \
+              --output json || true
+          else
+            echo "No tasks found yet."
+          fi
 
       - name: Wait for service stability
         run: |
