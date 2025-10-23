@@ -40,6 +40,24 @@ on:
         required: true
       BACKEND_REPO_NAME:
         required: true
+      ARN_APP_SECRETS_JWT:
+        required: true
+      ARN_APP_SECRETS_OAUTH_GOOGLE:
+        required: true
+      ARN_APP_SECRETS_MAIL:
+        required: true
+      ARN_APP_SECRETS_MQ:
+        required: true
+      ARN_APP_SECRETS_REDIS:
+        required: false
+      ARN_APP_SECRETS_MONGO_ANALYTICS:
+        required: true
+      ARN_APP_SECRETS_MONGO_GAMIFICATION:
+        required: true
+      ARN_APP_SECRETS_MONGO_NOTIFICATION:
+        required: true
+      ARN_APP_SECRETS_POSTGRES_SCHEMAS:
+        required: false
 
 env:
   AWS_REGION: eu-west-1
@@ -278,13 +296,74 @@ jobs:
               --query 'taskDefinition' \
               --output json)
 
-            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${SERVICE_NAME}:${{ inputs.commit_sha }}" '
-              .containerDefinitions[0].image = $IMAGE |
-              del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+            # Build ENV from SSM and SECRETS from Secrets Manager (same set used in business deploy)
+            PARAMS=(
+              "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
+              "/sdt-dev/config/LOG_LEVEL"
+              "/sdt-dev/config/AWS_REGION"
+              "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
+              "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
+              "/sdt-dev/endpoints/BASE_URL"
+              "/sdt-dev/db/JDBC_BASE"
+              "/sdt-dev/mongo/analytics_db"
+              "/sdt-dev/mongo/gamification_db"
+              "/sdt-dev/mongo/notification_db"
+            )
+
+            PARAM_JSON=$(aws ssm get-parameters \
+              --with-decryption \
+              --names "${PARAMS[@]}" \
+              --query 'Parameters[].{Name:Name,Value:Value}' \
+              --output json)
+
+            ENV_JSON=$(echo "$PARAM_JSON" | jq -c '[ .[] | {name: (.Name | split("/")[-1]), value: .Value} ]')
+
+            ARN_JWT="${{ secrets.ARN_APP_SECRETS_JWT }}"
+            ARN_OAUTH="${{ secrets.ARN_APP_SECRETS_OAUTH_GOOGLE }}"
+            ARN_MAIL="${{ secrets.ARN_APP_SECRETS_MAIL }}"
+            ARN_MQ="${{ secrets.ARN_APP_SECRETS_MQ }}"
+            ARN_REDIS="${{ secrets.ARN_APP_SECRETS_REDIS }}"
+            ARN_MONGO_ANALYTICS="${{ secrets.ARN_APP_SECRETS_MONGO_ANALYTICS }}"
+            ARN_MONGO_GAMIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_GAMIFICATION }}"
+            ARN_MONGO_NOTIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_NOTIFICATION }}"
+            ARN_PG_SCHEMAS="${{ secrets.ARN_APP_SECRETS_POSTGRES_SCHEMAS }}"
+
+            SECRETS_JSON=$(jq -c -n --arg arn_jwt "$ARN_JWT" \
+                                 --arg arn_oauth "$ARN_OAUTH" \
+                                 --arg arn_mail "$ARN_MAIL" \
+                                 --arg arn_mq "$ARN_MQ" \
+                                 --arg arn_redis "$ARN_REDIS" \
+                                 --arg arn_ma "$ARN_MONGO_ANALYTICS" \
+                                 --arg arn_mg "$ARN_MONGO_GAMIFICATION" \
+                                 --arg arn_mn "$ARN_MONGO_NOTIFICATION" \
+                                 --arg arn_pg "$ARN_PG_SCHEMAS" '
+              [
+                {name:"JWT_SECRET",                valueFrom:($arn_jwt+":JWT_SECRET")},
+                {name:"HMAC_SECRET_KEY",           valueFrom:($arn_jwt+":HMAC_SECRET_KEY")},
+                {name:"HMAC_ALGORITHM",            valueFrom:($arn_jwt+":HMAC_ALGORITHM")},
+                {name:"GOOGLE_CLIENT_ID",          valueFrom:($arn_oauth+":GOOGLE_CLIENT_ID")},
+                {name:"GOOGLE_CLIENT_SECRET",      valueFrom:($arn_oauth+":GOOGLE_CLIENT_SECRET")},
+                {name:"MAIL_USERNAME",             valueFrom:($arn_mail+":MAIL_USERNAME")},
+                {name:"MAIL_PASSWORD",             valueFrom:($arn_mail+":MAIL_PASSWORD")},
+                {name:"RABBITMQ_USER",             valueFrom:($arn_mq+":RABBITMQ_USER")},
+                {name:"RABBITMQ_PASSWORD",         valueFrom:($arn_mq+":RABBITMQ_PASSWORD")},
+                {name:"REDIS_PASSWORD",            valueFrom:($arn_redis+":REDIS_PASSWORD")}
+              ]')
+
+            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+              --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${SERVICE_NAME}:${{ inputs.commit_sha }}" \
+              --argjson ENV "$ENV_JSON" \
+              --argjson SECRETS "$SECRETS_JSON" '
+                .containerDefinitions[0].image = $IMAGE
+                | .containerDefinitions[0].environment = $ENV
+                | .containerDefinitions[0].secrets = $SECRETS
+                | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
             ')
 
-            NEW_TASK_ARN=$(echo "$NEW_TASK_DEF" | aws ecs register-task-definition \
-              --cli-input-json file:///dev/stdin \
+            # Validate JSON and register from file to avoid shell quoting issues
+            echo "$NEW_TASK_DEF" | jq -e '.' > taskdef.json
+            NEW_TASK_ARN=$(aws ecs register-task-definition \
+              --cli-input-json file://taskdef.json \
               --query 'taskDefinition.taskDefinitionArn' \
               --output text)
 
@@ -337,7 +416,89 @@ jobs:
             --output json)
           echo "task-def=$TASK_DEF" >> $GITHUB_OUTPUT
 
-      - name: Update task definition with new image
+      - name: Build environment and secrets for task
+        id: env-secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # SSM parameter names provisioned by Terraform
+          PARAMS=(
+            "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
+            "/sdt-dev/config/LOG_LEVEL"
+            "/sdt-dev/config/AWS_REGION"
+            "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
+            "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
+            "/sdt-dev/endpoints/BASE_URL"
+            "/sdt-dev/db/JDBC_BASE"
+            "/sdt-dev/mongo/analytics_db"
+            "/sdt-dev/mongo/gamification_db"
+            "/sdt-dev/mongo/notification_db"
+          )
+
+          PARAM_JSON=$(aws ssm get-parameters \
+            --with-decryption \
+            --names "${PARAMS[@]}" \
+            --query 'Parameters[].{Name:Name,Value:Value}' \
+            --output json)
+
+          # Convert SSM names to env var names (rightmost path segment)
+          ENV_JSON=$(echo "$PARAM_JSON" | jq -c '[ .[] | {name: (.Name | split("/")[-1]), value: .Value} ]')
+
+          # Secrets Manager ARNs from Terraform outputs (paste once; consider moving to repo env vars)
+          ARN_JWT="${{ secrets.ARN_APP_SECRETS_JWT }}"
+          ARN_OAUTH="${{ secrets.ARN_APP_SECRETS_OAUTH_GOOGLE }}"
+          ARN_MAIL="${{ secrets.ARN_APP_SECRETS_MAIL }}"
+          ARN_MQ="${{ secrets.ARN_APP_SECRETS_MQ }}"
+          ARN_REDIS="${{ secrets.ARN_APP_SECRETS_REDIS }}"
+          ARN_MONGO_ANALYTICS="${{ secrets.ARN_APP_SECRETS_MONGO_ANALYTICS }}"
+          ARN_MONGO_GAMIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_GAMIFICATION }}"
+          ARN_MONGO_NOTIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_NOTIFICATION }}"
+          ARN_PG_SCHEMAS="${{ secrets.ARN_APP_SECRETS_POSTGRES_SCHEMAS }}"
+
+          # Build generic secrets array. You may tailor per service later.
+          SECRETS_JSON=$(jq -c -n --arg arn_jwt "$ARN_JWT" \
+                               --arg arn_oauth "$ARN_OAUTH" \
+                               --arg arn_mail "$ARN_MAIL" \
+                               --arg arn_mq "$ARN_MQ" \
+                               --arg arn_redis "$ARN_REDIS" \
+                               --arg arn_ma "$ARN_MONGO_ANALYTICS" \
+                               --arg arn_mg "$ARN_MONGO_GAMIFICATION" \
+                               --arg arn_mn "$ARN_MONGO_NOTIFICATION" \
+                               --arg arn_pg "$ARN_PG_SCHEMAS" '
+            [
+              {name:"JWT_SECRET",                valueFrom:($arn_jwt+":JWT_SECRET")},
+              {name:"HMAC_SECRET_KEY",           valueFrom:($arn_jwt+":HMAC_SECRET_KEY")},
+              {name:"HMAC_ALGORITHM",            valueFrom:($arn_jwt+":HMAC_ALGORITHM")},
+              {name:"GOOGLE_CLIENT_ID",          valueFrom:($arn_oauth+":GOOGLE_CLIENT_ID")},
+              {name:"GOOGLE_CLIENT_SECRET",      valueFrom:($arn_oauth+":GOOGLE_CLIENT_SECRET")},
+              {name:"MAIL_USERNAME",             valueFrom:($arn_mail+":MAIL_USERNAME")},
+              {name:"MAIL_PASSWORD",             valueFrom:($arn_mail+":MAIL_PASSWORD")},
+              {name:"RABBITMQ_USER",             valueFrom:($arn_mq+":RABBITMQ_USER")},
+              {name:"RABBITMQ_PASSWORD",         valueFrom:($arn_mq+":RABBITMQ_PASSWORD")},
+              {name:"REDIS_PASSWORD",            valueFrom:($arn_redis+":REDIS_PASSWORD")},
+              {name:"MONGO_ANALYTICS_USER",      valueFrom:($arn_ma+":MONGO_ANALYTICS_USER")},
+              {name:"MONGO_ANALYTICS_PASSWORD",  valueFrom:($arn_ma+":MONGO_ANALYTICS_PASSWORD")},
+              {name:"MONGO_GAMIFICATION_USER",   valueFrom:($arn_mg+":MONGO_GAMIFICATION_USER")},
+              {name:"MONGO_GAMIFICATION_PASSWORD", valueFrom:($arn_mg+":MONGO_GAMIFICATION_PASSWORD")},
+              {name:"MONGO_NOTIFICATION_USER",   valueFrom:($arn_mn+":MONGO_NOTIFICATION_USER")},
+              {name:"MONGO_NOTIFICATION_PASSWORD", valueFrom:($arn_mn+":MONGO_NOTIFICATION_PASSWORD")},
+              {name:"POSTGRES_USER_USER",        valueFrom:($arn_pg+":POSTGRES_USER_USER")},
+              {name:"POSTGRES_USER_PASSWORD",    valueFrom:($arn_pg+":POSTGRES_USER_PASSWORD")},
+              {name:"POSTGRES_TASK_USER",        valueFrom:($arn_pg+":POSTGRES_TASK_USER")},
+              {name:"POSTGRES_TASK_PASSWORD",    valueFrom:($arn_pg+":POSTGRES_TASK_PASSWORD")},
+              {name:"POSTGRES_FEEDBACK_USER",    valueFrom:($arn_pg+":POSTGRES_FEEDBACK_USER")},
+              {name:"POSTGRES_FEEDBACK_PASSWORD",valueFrom:($arn_pg+":POSTGRES_FEEDBACK_PASSWORD")},
+              {name:"POSTGRES_PAYMENT_USER",     valueFrom:($arn_pg+":POSTGRES_PAYMENT_USER")},
+              {name:"POSTGRES_PAYMENT_PASSWORD", valueFrom:($arn_pg+":POSTGRES_PAYMENT_PASSWORD")},
+              {name:"POSTGRES_PRACTICE_USER",    valueFrom:($arn_pg+":POSTGRES_PRACTICE_USER")},
+              {name:"POSTGRES_PRACTICE_PASSWORD",valueFrom:($arn_pg+":POSTGRES_PRACTICE_PASSWORD")}
+            ]')
+
+          echo "env_json=$ENV_JSON" >> "$GITHUB_OUTPUT"
+          echo "secrets_json=$SECRETS_JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Update task definition with env, secrets and new image
         id: update-task-def
         run: |
           TASK_DEF=$(aws ecs describe-task-definition \
@@ -345,14 +506,20 @@ jobs:
             --query 'taskDefinition' \
             --output json)
 
-          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}" '
-            .containerDefinitions[0].image = $IMAGE |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-          ')
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | \
+            jq --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}" \
+               --argjson ENV '${{ steps.env-secrets.outputs.env_json }}' \
+               --argjson SECRETS '${{ steps.env-secrets.outputs.secrets_json }}' '
+              .containerDefinitions[0].image = $IMAGE
+              | .containerDefinitions[0].environment = $ENV
+              | .containerDefinitions[0].secrets = $SECRETS
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+            ')
 
-          NEW_TASK_ARN=$(echo $NEW_TASK_DEF | \
-            aws ecs register-task-definition \
-            --cli-input-json file:///dev/stdin \
+          # Validate JSON and register from file to avoid shell quoting issues
+          echo "$NEW_TASK_DEF" | jq -e '.' > taskdef.json
+          NEW_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://taskdef.json \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
 
