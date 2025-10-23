@@ -109,7 +109,7 @@ jobs:
               obj=$(jq -n --arg n "$name" --arg p "$path" --argjson port "$port" '{name:$n, path:$p, port:$port}')
               SERVICES_JSON=$(jq -c --argjson o "$obj" '. + [$o]' <<<"$SERVICES_JSON")
               case "$path" in
-                skilltracker-infra/*) : ;; # infra excluded from business
+                skilltracker-infra/*) : ;;
                 *) BUSINESS_JSON=$(jq -c --argjson o "$obj" '. + [$o]' <<<"$BUSINESS_JSON");;
               esac
             done
@@ -117,13 +117,6 @@ jobs:
             echo "business_services_json=$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
             echo "infra_any=true" >> "$GITHUB_OUTPUT"
             echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
-
-      - name: Debug changed services outputs
-        run: |
-          echo "services_json=${{ steps.compute.outputs.services_json }}"
-          echo "business_services_json=${{ steps.compute.outputs.business_services_json }}"
-          echo "infra_any=${{ steps.compute.outputs.infra_any }}"
-          echo "infra_csv=${{ steps.compute.outputs.infra_csv }}"
             exit 0
           fi
 
@@ -165,6 +158,13 @@ jobs:
           echo "business_services_json=$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
           echo "infra_any=$INFRA_ANY" >> "$GITHUB_OUTPUT"
           echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
+
+      - name: Debug changed services outputs
+        run: |
+          echo "services_json=${{ steps.compute.outputs.services_json }}"
+          echo "business_services_json=${{ steps.compute.outputs.business_services_json }}"
+          echo "infra_any=${{ steps.compute.outputs.infra_any }}"
+          echo "infra_csv=${{ steps.compute.outputs.infra_csv }}"
 
   build-and-push:
     name: Build and Push Docker Images
