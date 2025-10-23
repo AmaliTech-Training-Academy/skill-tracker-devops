@@ -264,6 +264,40 @@ module "api_gateway" {
   tags = local.common_tags
 }
 
+# Baseline ECS App Services - create task defs and services CI can update
+module "app_services" {
+  source = "../../modules/app-services"
+
+  project_name          = local.project_name
+  environment           = local.environment
+
+  cluster_id            = module.ecs.cluster_id
+  private_subnet_ids    = module.networking.private_subnet_ids
+  ecs_security_group_id = module.ecs.ecs_tasks_security_group_id
+
+  task_role_arn         = module.iam.ecs_task_role_arn
+  execution_role_arn    = module.iam.ecs_task_execution_role_arn
+
+  target_group_arn      = module.ecs.target_group_arn
+
+  log_groups            = module.ecs.log_groups
+
+  services = [
+    { name = "api-gateway",          port = 8080, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "config-server",        port = 8081, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "discovery-server",     port = 8082, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "bff-service",          port = 8083, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "user-service",         port = 8084, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "task-service",         port = 8085, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "analytics-service",    port = 8086, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "payment-service",      port = 8087, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "gamification-service", port = 8088, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "practice-service",     port = 8089, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "feedback-service",     port = 8090, desired_count = 1, cpu = 512,  memory = 1024 },
+    { name = "notification-service", port = 8091, desired_count = 1, cpu = 512,  memory = 1024 }
+  ]
+}
+
 # Amplify Module - Frontend (handled by colleague)
 module "amplify" {
   source = "../../modules/amplify"
