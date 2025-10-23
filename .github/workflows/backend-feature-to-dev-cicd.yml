@@ -413,6 +413,9 @@ jobs:
     if: always()
 
     steps:
+      - name: Checkout repository (required for local actions)
+        uses: actions/checkout@v4
+
       - name: Determine status
         id: status
         run: |
