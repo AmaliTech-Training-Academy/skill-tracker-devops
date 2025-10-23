@@ -352,11 +352,11 @@ jobs:
 
             NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
               --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${SERVICE_NAME}:${{ inputs.commit_sha }}" \
-              --argjson ENV "$ENV_JSON" \
-              --argjson SECRETS "$SECRETS_JSON" '
+              --argjson APP_ENV "$ENV_JSON" \
+              --argjson APP_SECRETS "$SECRETS_JSON" '
                 .containerDefinitions[0].image = $IMAGE
-                | .containerDefinitions[0].environment = $ENV
-                | .containerDefinitions[0].secrets = $SECRETS
+                | .containerDefinitions[0].environment = $APP_ENV
+                | .containerDefinitions[0].secrets = $APP_SECRETS
                 | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
             ')
 
@@ -508,11 +508,11 @@ jobs:
 
           NEW_TASK_DEF=$(echo "$TASK_DEF" | \
             jq --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}" \
-               --argjson ENV '${{ steps.env-secrets.outputs.env_json }}' \
-               --argjson SECRETS '${{ steps.env-secrets.outputs.secrets_json }}' '
+               --argjson APP_ENV '${{ steps.env-secrets.outputs.env_json }}' \
+               --argjson APP_SECRETS '${{ steps.env-secrets.outputs.secrets_json }}' '
               .containerDefinitions[0].image = $IMAGE
-              | .containerDefinitions[0].environment = $ENV
-              | .containerDefinitions[0].secrets = $SECRETS
+              | .containerDefinitions[0].environment = $APP_ENV
+              | .containerDefinitions[0].secrets = $APP_SECRETS
               | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
             ')
 
