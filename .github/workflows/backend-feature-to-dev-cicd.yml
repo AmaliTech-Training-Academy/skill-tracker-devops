@@ -160,6 +160,7 @@ jobs:
     needs: detect-changes
 
     strategy:
+      fail-fast: false
       matrix:
         service: ${{ fromJSON(needs.detect-changes.outputs.services_json) }}
 
