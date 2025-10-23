@@ -214,46 +214,44 @@ module "monitoring" {
 }
 
 # EFS Module - Persistent storage for data services
-# TODO: Create EFS module before uncommenting
-# module "efs" {
-#   source = "../../modules/efs"
-#
-#   project_name           = local.project_name
-#   environment            = local.environment
-#   vpc_id                 = module.networking.vpc_id
-#   private_subnet_ids     = module.networking.private_subnet_ids
-#   ecs_security_group_id  = module.ecs.ecs_tasks_security_group_id
-#
-#   tags = local.common_tags
-# }
+module "efs" {
+  source = "../../modules/efs"
+
+  project_name           = local.project_name
+  environment            = local.environment
+  vpc_id                 = module.networking.vpc_id
+  private_subnet_ids     = module.networking.private_subnet_ids
+  ecs_security_group_id  = module.ecs.ecs_tasks_security_group_id
+
+  tags = local.common_tags
+}
 
 # Data Services Module - MongoDB, Redis, RabbitMQ
-# TODO: Create data-services module before uncommenting
-# module "data_services" {
-#   source = "../../modules/data-services"
-#
-#   project_name               = local.project_name
-#   environment                = local.environment
-#   vpc_id                     = module.networking.vpc_id
-#   private_subnet_ids         = module.networking.private_subnet_ids
-#   ecs_cluster_id             = module.ecs.cluster_id
-#   ecs_security_group_id      = module.ecs.ecs_tasks_security_group_id
-#   ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
-#   ecs_task_role_arn          = module.iam.ecs_task_role_arn
-#
-#   # EFS configuration
-#   efs_file_system_id      = module.efs.file_system_id
-#   mongodb_access_point_id = module.efs.mongodb_access_point_id
-#   redis_access_point_id   = module.efs.redis_access_point_id
-#   rabbitmq_access_point_id = module.efs.rabbitmq_access_point_id
-#
-#   aws_region          = var.aws_region
-#   log_retention_days  = 30
-#
-#   tags = local.common_tags
-#
-#   depends_on = [module.efs]
-# }
+module "data_services" {
+  source = "../../modules/data-services"
+
+  project_name               = local.project_name
+  environment                = local.environment
+  vpc_id                     = module.networking.vpc_id
+  private_subnet_ids         = module.networking.private_subnet_ids
+  ecs_cluster_id             = module.ecs.cluster_id
+  ecs_security_group_id      = module.ecs.ecs_tasks_security_group_id
+  ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
+  ecs_task_role_arn          = module.iam.ecs_task_role_arn
+
+  # EFS configuration
+  efs_file_system_id      = module.efs.file_system_id
+  mongodb_access_point_id = module.efs.mongodb_access_point_id
+  redis_access_point_id   = module.efs.redis_access_point_id
+  rabbitmq_access_point_id = module.efs.rabbitmq_access_point_id
+
+  aws_region          = var.aws_region
+  log_retention_days  = 30
+
+  tags = local.common_tags
+
+  depends_on = [module.efs]
+}
 
 # API Gateway Module
 module "api_gateway" {
@@ -264,6 +262,132 @@ module "api_gateway" {
   alb_dns_name = module.ecs.alb_dns_name
 
   tags = local.common_tags
+}
+
+# Application Secrets
+resource "aws_secretsmanager_secret" "jwt" {
+  name        = "sdt-dev-app-secrets-jwt"
+  description = "JWT and HMAC secrets for backend"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret" "mail" {
+  name        = "sdt-dev-app-secrets-mail"
+  description = "Mail configuration secrets"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret" "mongo_analytics" {
+  name        = "sdt-dev-app-secrets-mongo-analytics"
+  description = "MongoDB analytics database credentials"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret" "mongo_gamification" {
+  name        = "sdt-dev-app-secrets-mongo-gamification"
+  description = "MongoDB gamification database credentials"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret" "mongo_notification" {
+  name        = "sdt-dev-app-secrets-mongo-notification"
+  description = "MongoDB notification database credentials"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret" "mq" {
+  name        = "sdt-dev-app-secrets-mq"
+  description = "Message queue configuration"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret" "oauth_google" {
+  name        = "sdt-dev-app-secrets-oauth-google"
+  description = "Google OAuth credentials"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret" "postgres_schema_users" {
+  name        = "sdt-dev-app-secrets-postgres-schemas"
+  description = "PostgreSQL schema configurations"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret" "redis" {
+  name        = "sdt-dev-app-secrets-redis"
+  description = "Redis configuration"
+  tags        = local.common_tags
+}
+
+# SSM Parameters for application configuration
+resource "aws_ssm_parameter" "aws_region" {
+  name  = "/sdt-dev/config/AWS_REGION"
+  type  = "String"
+  value = var.aws_region
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "base_url" {
+  name  = "/sdt-dev/endpoints/BASE_URL"
+  type  = "String"
+  value = module.api_gateway.api_gateway_url
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "config_server_uri" {
+  name  = "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
+  type  = "String"
+  value = "http://config-server.dev.sdt.local:8081"
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "eureka_zone" {
+  name  = "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
+  type  = "String"
+  value = "http://discovery-server.dev.sdt.local:8082/eureka"
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "log_level" {
+  name  = "/sdt-dev/config/LOG_LEVEL"
+  type  = "String"
+  value = "INFO"
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "mongo_analytics_db" {
+  name  = "/sdt-dev/mongo/analytics_db"
+  type  = "String"
+  value = "analytics"
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "mongo_gamification_db" {
+  name  = "/sdt-dev/mongo/gamification_db"
+  type  = "String"
+  value = "gamification"
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "mongo_notification_db" {
+  name  = "/sdt-dev/mongo/notification_db"
+  type  = "String"
+  value = "notification"
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "postgres_jdbc_base" {
+  name  = "/sdt-dev/db/JDBC_BASE"
+  type  = "String"
+  value = "jdbc:postgresql://${module.rds.db_instance_address}:5432"
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "spring_profile" {
+  name  = "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
+  type  = "String"
+  value = "dev"
+  tags  = local.common_tags
 }
 
 # Amplify Module - Frontend (handled by colleague)
@@ -278,13 +402,15 @@ module "amplify" {
   platform               = "WEB"
   build_output_directory = "dist/SkillBoost/browser"
 
-  # Custom build spec with SPA redirect
+  # Custom build spec with SPA redirect - force npm install over npm ci
   build_spec = <<-EOT
     version: 1
     frontend:
       phases:
         preBuild:
           commands:
+            - echo "Forcing npm install instead of npm ci"
+            - rm -f package-lock.json
             - npm install
             - echo "Creating .env file with environment variables"
             - echo "NG_APP_URL=$NG_APP_URL" > .env
