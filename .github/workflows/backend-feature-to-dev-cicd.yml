@@ -17,9 +17,6 @@ on:
       target_branch:
         required: true
         type: string
-      repo_name:
-        required: true
-        type: string
       commit_sha:
         required: true
         type: string
@@ -27,6 +24,10 @@ on:
         required: false
         type: boolean
         default: true
+      force_full_build:
+        required: false
+        type: boolean
+        default: false
     # Required secrets for AWS authentication, Docker registry, and notifications
     secrets:
       AWS_ACCESS_KEY_ID:
@@ -37,7 +38,26 @@ on:
         required: false
       PERSONAL_ACCESS_TOKEN:
         required: true
-
+      BACKEND_REPO_NAME:
+        required: true
+      ARN_APP_SECRETS_JWT:
+        required: true
+      ARN_APP_SECRETS_OAUTH_GOOGLE:
+        required: true
+      ARN_APP_SECRETS_MAIL:
+        required: true
+      ARN_APP_SECRETS_MQ:
+        required: true
+      ARN_APP_SECRETS_REDIS:
+        required: false
+      ARN_APP_SECRETS_MONGO_ANALYTICS:
+        required: true
+      ARN_APP_SECRETS_MONGO_GAMIFICATION:
+        required: true
+      ARN_APP_SECRETS_MONGO_NOTIFICATION:
+        required: true
+      ARN_APP_SECRETS_POSTGRES_SCHEMAS:
+        required: false
 
 env:
   AWS_REGION: eu-west-1
@@ -45,55 +65,144 @@ env:
   ECR_REPOSITORY_PREFIX: sdt/dev
 
 jobs:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+
+    outputs:
+      services_json: ${{ steps.compute.outputs.services_json }}
+      business_services_json: ${{ steps.compute.outputs.business_services_json }}
+      infra_any: ${{ steps.compute.outputs.infra_any }}
+      infra_csv: ${{ steps.compute.outputs.infra_csv }}
+
+    steps:
+      - name: Checkout backend repository (full history)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.BACKEND_REPO_NAME }}
+          ref: ${{ inputs.commit_sha }}
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          fetch-depth: 0
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Compute changed services matrix
+        id: compute
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Define services mapping
+          NAMES=(
+            config-server discovery-server api-gateway
+            bff-service user-service task-service analytics-service payment-service gamification-service practice-service feedback-service notification-service
+          )
+          PATHS=(
+            skilltracker-infra/config-server
+            skilltracker-infra/discovery-server
+            skilltracker-infra/api-gateway
+            skilltracker-services/bff-service
+            skilltracker-services/user-service
+            skilltracker-services/task-service
+            skilltracker-services/analytics-service
+            skilltracker-services/payment-service
+            skilltracker-services/gamification-service
+            skilltracker-services/practice-service
+            skilltracker-services/feedback-service
+            skilltracker-services/notification-service
+          )
+          PORTS=(8081 8082 8080 8083 8084 8085 8086 8087 8088 8089 8090 8091)
+
+          # If manual override is enabled, output all services and exit
+          if [ "${{ inputs.force_full_build }}" = "true" ]; then
+            echo "force_full_build enabled: selecting ALL services"
+            SERVICES_JSON='[]'
+            BUSINESS_JSON='[]'
+            INFRA_CSV="config-server,discovery-server,api-gateway"
+            for i in "${!NAMES[@]}"; do
+              name="${NAMES[$i]}"; path="${PATHS[$i]}"; port="${PORTS[$i]}"
+              obj=$(jq -n --arg n "$name" --arg p "$path" --argjson port "$port" '{name:$n, path:$p, port:$port}')
+              SERVICES_JSON=$(jq -c --argjson o "$obj" '. + [$o]' <<<"$SERVICES_JSON")
+              case "$path" in
+                skilltracker-infra/*) : ;;
+                *) BUSINESS_JSON=$(jq -c --argjson o "$obj" '. + [$o]' <<<"$BUSINESS_JSON");;
+              esac
+            done
+            echo "services_json=$SERVICES_JSON" >> "$GITHUB_OUTPUT"
+            echo "business_services_json=$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
+            echo "infra_any=true" >> "$GITHUB_OUTPUT"
+            echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          COMMIT="${{ inputs.commit_sha }}"
+          PARENT="${COMMIT}^1"
+          # Fallback if parent is missing (e.g., not a merge commit)
+          if ! git cat-file -e "$PARENT" 2>/dev/null; then
+            PARENT="${COMMIT}^"
+          fi
+
+          echo "Comparing $PARENT..$COMMIT"
+          CHANGED=$(git diff --name-only "$PARENT" "$COMMIT" || true)
+          printf '%s\n' "$CHANGED"
+
+          SERVICES_JSON='[]'
+          BUSINESS_JSON='[]'
+          INFRA_CSV=""
+
+          for i in "${!NAMES[@]}"; do
+            name="${NAMES[$i]}"; path="${PATHS[$i]}"; port="${PORTS[$i]}"
+            if printf '%s\n' "$CHANGED" | grep -qE "^${path}/"; then
+              obj=$(jq -n --arg n "$name" --arg p "$path" --argjson port "$port" '{name:$n, path:$p, port:$port}')
+              SERVICES_JSON=$(jq -c --argjson o "$obj" '. + [$o]' <<<"$SERVICES_JSON")
+              case "$path" in
+                skilltracker-infra/*)
+                  if [ -z "$INFRA_CSV" ]; then INFRA_CSV="$name"; else INFRA_CSV="$INFRA_CSV,$name"; fi
+                  ;;
+                *)
+                  BUSINESS_JSON=$(jq -c --argjson o "$obj" '. + [$o]' <<<"$BUSINESS_JSON")
+                  ;;
+              esac
+            fi
+          done
+
+          INFRA_ANY=false
+          if [ -n "$INFRA_CSV" ]; then INFRA_ANY=true; fi
+
+          echo "services_json=$SERVICES_JSON" >> "$GITHUB_OUTPUT"
+          echo "business_services_json=$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
+          echo "infra_any=$INFRA_ANY" >> "$GITHUB_OUTPUT"
+          echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
+
+      - name: Debug changed services outputs
+        run: |
+          echo "services_json=${{ steps.compute.outputs.services_json }}"
+          echo "business_services_json=${{ steps.compute.outputs.business_services_json }}"
+          echo "infra_any=${{ steps.compute.outputs.infra_any }}"
+          echo "infra_csv=${{ steps.compute.outputs.infra_csv }}"
+
   build-and-push:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
+    needs: detect-changes
+    continue-on-error: true
 
     strategy:
+      fail-fast: false
       matrix:
-        service:
-          # Infrastructure Services
-          - name: config-server
-            path: skilltracker-infra/config-server
-            port: 8081
-          - name: discovery-server
-            path: skilltracker-infra/discovery-server
-            port: 8082
-          - name: api-gateway
-            path: skilltracker-infra/api-gateway
-            port: 8080
-          # Business Services
-          - name: bff-service
-            path: skilltracker-services/bff-service
-            port: 8083
-          - name: user-service
-            path: skilltracker-services/user-service
-            port: 8084
-          - name: task-service
-            path: skilltracker-services/task-service
-            port: 8085
-          - name: analytics-service
-            path: skilltracker-services/analytics-service
-            port: 8086
-          - name: payment-service
-            path: skilltracker-services/payment-service
-            port: 8087
-          - name: gamification-service
-            path: skilltracker-services/gamification-service
-            port: 8088
-          - name: practice-service
-            path: skilltracker-services/practice-service
-            port: 8089
-          - name: feedback-service
-            path: skilltracker-services/feedback-service
-            port: 8090
-          - name: notification-service
-            path: skilltracker-services/notification-service
-            port: 8091
+        service: ${{ fromJSON(needs.detect-changes.outputs.services_json) }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout backend repository
         uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.BACKEND_REPO_NAME }}
+          ref: ${{ inputs.commit_sha }}
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -101,6 +210,15 @@ jobs:
           distribution: "temurin"
           java-version: "21"
           cache: "maven"
+
+      - name: Install Maven (host)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y maven
+
+      - name: Prime Maven cache (host)
+        run: |
+          mvn -q -DskipTests -f ./${{ matrix.service.path }}/pom.xml dependency:go-offline
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -119,57 +237,197 @@ jobs:
           docker build \
             -f ./${{ matrix.service.path }}/Dockerfile \
             -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:latest \
-            -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ github.sha }} \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }} \
             .
 
       - name: Push Docker image to ECR
         run: |
           echo "📤 Pushing ${{ matrix.service.name }} to ECR"
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:latest
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ github.sha }}
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}
 
       - name: Image digest
         run: |
           echo "✅ Successfully pushed ${{ matrix.service.name }}"
           echo "📦 Latest: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:latest"
-          echo "📦 Tagged: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ github.sha }}"
+          echo "📦 Tagged: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}"
 
-  deploy-to-ecs:
-    name: Deploy to ECS
+  deploy-infra:
+    name: Deploy Infra Services (ordered)
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-and-push, detect-changes]
+    if: inputs.enable_ecs_deploy && needs.detect-changes.outputs.infra_any == 'true'
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Deploy infra sequentially
+        run: |
+          set -euo pipefail
+
+          deploy_one() {
+            SERVICE_NAME="$1"
+            echo "=== Deploying $SERVICE_NAME ==="
+
+            # Resolve current task definition ARN from the service (avoids assumptions about family name)
+            TASK_DEF_ARN=$(aws ecs describe-services \
+              --cluster sdt-dev-cluster \
+              --services sdt-dev-${SERVICE_NAME} \
+              --query 'services[0].taskDefinition' \
+              --output text || true)
+
+            if [ -z "$TASK_DEF_ARN" ] || [ "$TASK_DEF_ARN" = "None" ]; then
+              echo "Service sdt-dev-${SERVICE_NAME} not found or has no taskDefinition. Skipping."
+              return 0
+            fi
+
+            TASK_DEF=$(aws ecs describe-task-definition \
+              --task-definition "$TASK_DEF_ARN" \
+              --query 'taskDefinition' \
+              --output json)
+
+            # Build ENV from SSM and SECRETS from Secrets Manager (same set used in business deploy)
+            PARAMS=(
+              "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
+              "/sdt-dev/config/LOG_LEVEL"
+              "/sdt-dev/config/AWS_REGION"
+              "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
+              "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
+              "/sdt-dev/endpoints/BASE_URL"
+              "/sdt-dev/db/JDBC_BASE"
+              "/sdt-dev/mongo/analytics_db"
+              "/sdt-dev/mongo/gamification_db"
+              "/sdt-dev/mongo/notification_db"
+            )
+
+            PARAM_JSON=$(aws ssm get-parameters \
+              --with-decryption \
+              --names "${PARAMS[@]}" \
+              --query 'Parameters[].{Name:Name,Value:Value}' \
+              --output json)
+
+            ENV_JSON=$(echo "$PARAM_JSON" | jq -c '[ .[] | {name: (.Name | split("/")[-1]), value: .Value} ]')
+
+            ARN_JWT="${{ secrets.ARN_APP_SECRETS_JWT }}"
+            ARN_OAUTH="${{ secrets.ARN_APP_SECRETS_OAUTH_GOOGLE }}"
+            ARN_MAIL="${{ secrets.ARN_APP_SECRETS_MAIL }}"
+            ARN_MQ="${{ secrets.ARN_APP_SECRETS_MQ }}"
+            ARN_REDIS="${{ secrets.ARN_APP_SECRETS_REDIS }}"
+            ARN_MONGO_ANALYTICS="${{ secrets.ARN_APP_SECRETS_MONGO_ANALYTICS }}"
+            ARN_MONGO_GAMIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_GAMIFICATION }}"
+            ARN_MONGO_NOTIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_NOTIFICATION }}"
+            ARN_PG_SCHEMAS="${{ secrets.ARN_APP_SECRETS_POSTGRES_SCHEMAS }}"
+
+            SECRETS_JSON=$(jq -c -n --arg arn_jwt "$ARN_JWT" \
+                                 --arg arn_oauth "$ARN_OAUTH" \
+                                 --arg arn_mail "$ARN_MAIL" \
+                                 --arg arn_mq "$ARN_MQ" \
+                                 --arg arn_redis "$ARN_REDIS" \
+                                 --arg arn_ma "$ARN_MONGO_ANALYTICS" \
+                                 --arg arn_mg "$ARN_MONGO_GAMIFICATION" \
+                                 --arg arn_mn "$ARN_MONGO_NOTIFICATION" \
+                                 --arg arn_pg "$ARN_PG_SCHEMAS" '
+              [
+                {name:"JWT_SECRET",                valueFrom:($arn_jwt+":JWT_SECRET")},
+                {name:"HMAC_SECRET_KEY",           valueFrom:($arn_jwt+":HMAC_SECRET_KEY")},
+                {name:"HMAC_ALGORITHM",            valueFrom:($arn_jwt+":HMAC_ALGORITHM")},
+                {name:"GOOGLE_CLIENT_ID",          valueFrom:($arn_oauth+":GOOGLE_CLIENT_ID")},
+                {name:"GOOGLE_CLIENT_SECRET",      valueFrom:($arn_oauth+":GOOGLE_CLIENT_SECRET")},
+                {name:"MAIL_USERNAME",             valueFrom:($arn_mail+":MAIL_USERNAME")},
+                {name:"MAIL_PASSWORD",             valueFrom:($arn_mail+":MAIL_PASSWORD")},
+                {name:"RABBITMQ_USER",             valueFrom:($arn_mq+":RABBITMQ_USER")},
+                {name:"RABBITMQ_PASSWORD",         valueFrom:($arn_mq+":RABBITMQ_PASSWORD")},
+                {name:"REDIS_PASSWORD",            valueFrom:($arn_redis+":REDIS_PASSWORD")}
+              ]')
+
+            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+              --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${SERVICE_NAME}:${{ inputs.commit_sha }}" \
+              --argjson APP_ENV "$ENV_JSON" \
+              --argjson APP_SECRETS "$SECRETS_JSON" '
+                .containerDefinitions[0].image = $IMAGE
+                | .containerDefinitions[0].environment = $APP_ENV
+                | .containerDefinitions[0].secrets = $APP_SECRETS
+                | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+            ')
+
+            # Validate JSON and register from file to avoid shell quoting issues
+            echo "$NEW_TASK_DEF" | jq -e '.' > taskdef.json
+            NEW_TASK_ARN=$(aws ecs register-task-definition \
+              --cli-input-json file://taskdef.json \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text)
+
+            echo "Registered task def: $NEW_TASK_ARN"
+
+            aws ecs update-service \
+              --cluster sdt-dev-cluster \
+              --service sdt-dev-${SERVICE_NAME} \
+              --task-definition "$NEW_TASK_ARN" \
+              --force-new-deployment \
+              --no-cli-pager
+
+            echo "Recent ECS service events for $SERVICE_NAME:"
+            aws ecs describe-services \
+              --cluster sdt-dev-cluster \
+              --services sdt-dev-${SERVICE_NAME} \
+              --query 'services[0].events[0:10].[createdAt,message]' \
+              --output table || true
+
+            echo "Describe latest tasks for $SERVICE_NAME:"
+            TASK_ARNS=$(aws ecs list-tasks \
+              --cluster sdt-dev-cluster \
+              --service-name sdt-dev-${SERVICE_NAME} \
+              --desired-status RUNNING \
+              --output text --query 'taskArns')
+            if [ -z "$TASK_ARNS" ]; then
+              TASK_ARNS=$(aws ecs list-tasks \
+                --cluster sdt-dev-cluster \
+                --service-name sdt-dev-${SERVICE_NAME} \
+                --desired-status STOPPED \
+                --output text --query 'taskArns[0:5]')
+            fi
+            if [ -n "$TASK_ARNS" ]; then
+              aws ecs describe-tasks \
+                --cluster sdt-dev-cluster \
+                --tasks $TASK_ARNS \
+                --query 'tasks[].{last:lastStatus,desired:desiredStatus,stopped:stoppedReason,containers:containers[].reason}' \
+                --output json || true
+            else
+              echo "No tasks found yet for $SERVICE_NAME."
+            fi
+
+            echo "Waiting for $SERVICE_NAME to stabilize..."
+            aws ecs wait services-stable \
+              --cluster sdt-dev-cluster \
+              --services sdt-dev-${SERVICE_NAME}
+            echo "✅ $SERVICE_NAME is stable!"
+          }
+
+          # Enforce order: config -> discovery -> api-gateway
+          deploy_one config-server
+          deploy_one discovery-server
+          deploy_one api-gateway
+
+  deploy-business:
+    name: Deploy Business Services (parallel)
+    runs-on: ubuntu-latest
+    needs: [deploy-infra, detect-changes]
     if: inputs.enable_ecs_deploy
 
     strategy:
       matrix:
-        service:
-          # Infrastructure Services (deploy first)
-          - name: config-server
-            priority: 1
-          - name: discovery-server
-            priority: 2
-          - name: api-gateway
-            priority: 3
-          # Business Services (deploy in parallel)
-          - name: bff-service
-            priority: 4
-          - name: user-service
-            priority: 4
-          - name: task-service
-            priority: 4
-          - name: analytics-service
-            priority: 4
-          - name: payment-service
-            priority: 4
-          - name: gamification-service
-            priority: 4
-          - name: practice-service
-            priority: 4
-          - name: feedback-service
-            priority: 4
-          - name: notification-service
-            priority: 4
-      max-parallel: 4  # Deploy business services in batches
+        service: ${{ fromJSON(needs.detect-changes.outputs.business_services_json) }}
+      max-parallel: 4
 
     steps:
       - name: Configure AWS credentials
@@ -188,28 +446,113 @@ jobs:
             --output json)
           echo "task-def=$TASK_DEF" >> $GITHUB_OUTPUT
 
-      - name: Update task definition with new image
+      - name: Build environment and secrets for task
+        id: env-secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # SSM parameter names provisioned by Terraform
+          PARAMS=(
+            "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
+            "/sdt-dev/config/LOG_LEVEL"
+            "/sdt-dev/config/AWS_REGION"
+            "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
+            "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
+            "/sdt-dev/endpoints/BASE_URL"
+            "/sdt-dev/db/JDBC_BASE"
+            "/sdt-dev/mongo/analytics_db"
+            "/sdt-dev/mongo/gamification_db"
+            "/sdt-dev/mongo/notification_db"
+          )
+
+          PARAM_JSON=$(aws ssm get-parameters \
+            --with-decryption \
+            --names "${PARAMS[@]}" \
+            --query 'Parameters[].{Name:Name,Value:Value}' \
+            --output json)
+
+          # Convert SSM names to env var names (rightmost path segment)
+          ENV_JSON=$(echo "$PARAM_JSON" | jq -c '[ .[] | {name: (.Name | split("/")[-1]), value: .Value} ]')
+
+          # Secrets Manager ARNs from Terraform outputs (paste once; consider moving to repo env vars)
+          ARN_JWT="${{ secrets.ARN_APP_SECRETS_JWT }}"
+          ARN_OAUTH="${{ secrets.ARN_APP_SECRETS_OAUTH_GOOGLE }}"
+          ARN_MAIL="${{ secrets.ARN_APP_SECRETS_MAIL }}"
+          ARN_MQ="${{ secrets.ARN_APP_SECRETS_MQ }}"
+          ARN_REDIS="${{ secrets.ARN_APP_SECRETS_REDIS }}"
+          ARN_MONGO_ANALYTICS="${{ secrets.ARN_APP_SECRETS_MONGO_ANALYTICS }}"
+          ARN_MONGO_GAMIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_GAMIFICATION }}"
+          ARN_MONGO_NOTIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_NOTIFICATION }}"
+          ARN_PG_SCHEMAS="${{ secrets.ARN_APP_SECRETS_POSTGRES_SCHEMAS }}"
+
+          # Build generic secrets array. You may tailor per service later.
+          SECRETS_JSON=$(jq -c -n --arg arn_jwt "$ARN_JWT" \
+                               --arg arn_oauth "$ARN_OAUTH" \
+                               --arg arn_mail "$ARN_MAIL" \
+                               --arg arn_mq "$ARN_MQ" \
+                               --arg arn_redis "$ARN_REDIS" \
+                               --arg arn_ma "$ARN_MONGO_ANALYTICS" \
+                               --arg arn_mg "$ARN_MONGO_GAMIFICATION" \
+                               --arg arn_mn "$ARN_MONGO_NOTIFICATION" \
+                               --arg arn_pg "$ARN_PG_SCHEMAS" '
+            [
+              {name:"JWT_SECRET",                valueFrom:($arn_jwt+":JWT_SECRET")},
+              {name:"HMAC_SECRET_KEY",           valueFrom:($arn_jwt+":HMAC_SECRET_KEY")},
+              {name:"HMAC_ALGORITHM",            valueFrom:($arn_jwt+":HMAC_ALGORITHM")},
+              {name:"GOOGLE_CLIENT_ID",          valueFrom:($arn_oauth+":GOOGLE_CLIENT_ID")},
+              {name:"GOOGLE_CLIENT_SECRET",      valueFrom:($arn_oauth+":GOOGLE_CLIENT_SECRET")},
+              {name:"MAIL_USERNAME",             valueFrom:($arn_mail+":MAIL_USERNAME")},
+              {name:"MAIL_PASSWORD",             valueFrom:($arn_mail+":MAIL_PASSWORD")},
+              {name:"RABBITMQ_USER",             valueFrom:($arn_mq+":RABBITMQ_USER")},
+              {name:"RABBITMQ_PASSWORD",         valueFrom:($arn_mq+":RABBITMQ_PASSWORD")},
+              {name:"REDIS_PASSWORD",            valueFrom:($arn_redis+":REDIS_PASSWORD")},
+              {name:"MONGO_ANALYTICS_USER",      valueFrom:($arn_ma+":MONGO_ANALYTICS_USER")},
+              {name:"MONGO_ANALYTICS_PASSWORD",  valueFrom:($arn_ma+":MONGO_ANALYTICS_PASSWORD")},
+              {name:"MONGO_GAMIFICATION_USER",   valueFrom:($arn_mg+":MONGO_GAMIFICATION_USER")},
+              {name:"MONGO_GAMIFICATION_PASSWORD", valueFrom:($arn_mg+":MONGO_GAMIFICATION_PASSWORD")},
+              {name:"MONGO_NOTIFICATION_USER",   valueFrom:($arn_mn+":MONGO_NOTIFICATION_USER")},
+              {name:"MONGO_NOTIFICATION_PASSWORD", valueFrom:($arn_mn+":MONGO_NOTIFICATION_PASSWORD")},
+              {name:"POSTGRES_USER_USER",        valueFrom:($arn_pg+":POSTGRES_USER_USER")},
+              {name:"POSTGRES_USER_PASSWORD",    valueFrom:($arn_pg+":POSTGRES_USER_PASSWORD")},
+              {name:"POSTGRES_TASK_USER",        valueFrom:($arn_pg+":POSTGRES_TASK_USER")},
+              {name:"POSTGRES_TASK_PASSWORD",    valueFrom:($arn_pg+":POSTGRES_TASK_PASSWORD")},
+              {name:"POSTGRES_FEEDBACK_USER",    valueFrom:($arn_pg+":POSTGRES_FEEDBACK_USER")},
+              {name:"POSTGRES_FEEDBACK_PASSWORD",valueFrom:($arn_pg+":POSTGRES_FEEDBACK_PASSWORD")},
+              {name:"POSTGRES_PAYMENT_USER",     valueFrom:($arn_pg+":POSTGRES_PAYMENT_USER")},
+              {name:"POSTGRES_PAYMENT_PASSWORD", valueFrom:($arn_pg+":POSTGRES_PAYMENT_PASSWORD")},
+              {name:"POSTGRES_PRACTICE_USER",    valueFrom:($arn_pg+":POSTGRES_PRACTICE_USER")},
+              {name:"POSTGRES_PRACTICE_PASSWORD",valueFrom:($arn_pg+":POSTGRES_PRACTICE_PASSWORD")}
+            ]')
+
+          echo "env_json=$ENV_JSON" >> "$GITHUB_OUTPUT"
+          echo "secrets_json=$SECRETS_JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Update task definition with env, secrets and new image
         id: update-task-def
         run: |
-          # Get the current task definition
           TASK_DEF=$(aws ecs describe-task-definition \
             --task-definition sdt-dev-${{ matrix.service.name }} \
             --query 'taskDefinition' \
             --output json)
-          
-          # Update the image tag
-          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ github.sha }}" '
-            .containerDefinitions[0].image = $IMAGE |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-          ')
-          
-          # Register new task definition
-          NEW_TASK_ARN=$(echo $NEW_TASK_DEF | \
-            aws ecs register-task-definition \
-            --cli-input-json file:///dev/stdin \
+
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | \
+            jq --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}" \
+               --argjson APP_ENV '${{ steps.env-secrets.outputs.env_json }}' \
+               --argjson APP_SECRETS '${{ steps.env-secrets.outputs.secrets_json }}' '
+              .containerDefinitions[0].image = $IMAGE
+              | .containerDefinitions[0].environment = $APP_ENV
+              | .containerDefinitions[0].secrets = $APP_SECRETS
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+            ')
+
+          # Validate JSON and register from file to avoid shell quoting issues
+          echo "$NEW_TASK_DEF" | jq -e '.' > taskdef.json
+          NEW_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://taskdef.json \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
-          
+
           echo "task-arn=$NEW_TASK_ARN" >> $GITHUB_OUTPUT
           echo "✅ Registered new task definition: $NEW_TASK_ARN"
 
@@ -223,6 +566,38 @@ jobs:
             --force-new-deployment \
             --no-cli-pager
 
+      - name: Show recent ECS service events
+        run: |
+          aws ecs describe-services \
+            --cluster sdt-dev-cluster \
+            --services sdt-dev-${{ matrix.service.name }} \
+            --query 'services[0].events[0:10].[createdAt,message]' \
+            --output table || true
+
+      - name: Describe latest tasks and stopped reasons
+        run: |
+          TASK_ARNS=$(aws ecs list-tasks \
+            --cluster sdt-dev-cluster \
+            --service-name sdt-dev-${{ matrix.service.name }} \
+            --desired-status RUNNING \
+            --output text --query 'taskArns')
+          if [ -z "$TASK_ARNS" ]; then
+            TASK_ARNS=$(aws ecs list-tasks \
+              --cluster sdt-dev-cluster \
+              --service-name sdt-dev-${{ matrix.service.name }} \
+              --desired-status STOPPED \
+              --output text --query 'taskArns[0:5]')
+          fi
+          if [ -n "$TASK_ARNS" ]; then
+            aws ecs describe-tasks \
+              --cluster sdt-dev-cluster \
+              --tasks $TASK_ARNS \
+              --query 'tasks[].{last:lastStatus,desired:desiredStatus,stopped:stoppedReason,containers:containers[].reason}' \
+              --output json || true
+          else
+            echo "No tasks found yet."
+          fi
+
       - name: Wait for service stability
         run: |
           echo "⏳ Waiting for service to stabilize..."
@@ -234,7 +609,7 @@ jobs:
   health-check:
     name: Health Check Services
     runs-on: ubuntu-latest
-    needs: deploy-to-ecs
+    needs: deploy-business
     if: inputs.enable_ecs_deploy
 
     steps:
@@ -262,7 +637,7 @@ jobs:
             "feedback-service"
             "notification-service"
           )
-          
+
           ALL_HEALTHY=true
           for service in "${SERVICES[@]}"; do
             echo "Checking sdt-dev-$service..."
@@ -282,12 +657,12 @@ jobs:
               ALL_HEALTHY=false
             fi
           done
-          
+
           if [ "$ALL_HEALTHY" = false ]; then
             echo "⚠️ Some services are not healthy!"
             exit 1
           fi
-          
+
           echo "✅ All services are healthy!"
 
       - name: Get ALB endpoint
@@ -303,10 +678,13 @@ jobs:
   notify-slack:
     name: Notify Slack
     runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-to-ecs, health-check]
+    needs: [build-and-push, deploy-infra, deploy-business, health-check]
     if: always()
 
     steps:
+      - name: Checkout repository (required for local actions)
+        uses: actions/checkout@v4
+
       - name: Determine status
         id: status
         run: |
@@ -325,8 +703,9 @@ jobs:
           fi
 
       - name: Send Slack notification
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: ./.github/actions/slack-notify
         with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
               "text": "${{ steps.status.outputs.emoji }} Backend Deployment to Dev",
@@ -334,74 +713,32 @@ jobs:
                 {
                   "color": "${{ steps.status.outputs.color }}",
                   "fields": [
-                    {
-                      "title": "Status",
-                      "value": "${{ steps.status.outputs.status }}",
-                      "short": true
-                    },
-                    {
-                      "title": "Environment",
-                      "value": "Dev",
-                      "short": true
-                    },
-                    {
-                      "title": "PR Title",
-                      "value": "${{ inputs.pr_title }}",
-                      "short": false
-                    },
-                    {
-                      "title": "Author",
-                      "value": "${{ inputs.pr_author }}",
-                      "short": true
-                    },
-                    {
-                      "title": "Commit",
-                      "value": "<${{ inputs.pr_url }}|View PR>",
-                      "short": true
-                    },
-                    {
-                      "title": "Services Deployed",
-                      "value": "12 microservices",
-                      "short": true
-                    },
-                    {
-                      "title": "Build Result",
-                      "value": "${{ needs.build-and-push.result }}",
-                      "short": true
-                    },
-                    {
-                      "title": "Deploy Result",
-                      "value": "${{ needs.deploy-to-ecs.result }}",
-                      "short": true
-                    },
-                    {
-                      "title": "Health Check",
-                      "value": "${{ needs.health-check.result }}",
-                      "short": true
-                    }
+                    { "title": "Status", "value": "${{ steps.status.outputs.status }}", "short": true },
+                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
+                    { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
+                    { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
+                    { "title": "Build Result", "value": "${{ needs.build-and-push.result }}", "short": true },
+                    { "title": "Deploy Results", "value": "infra: ${{ needs.deploy-infra.result }}, business: ${{ needs.deploy-business.result }}", "short": true },
+                    { "title": "Health Check", "value": "${{ needs.health-check.result }}", "short": true }
                   ],
                   "footer": "GitHub Actions",
-                  "footer_icon": "https://github.githubassets.com/favicon.ico",
-                  "ts": ${{ github.event.head_commit.timestamp }}
+                  "footer_icon": "https://github.githubassets.com/favicon.ico"
                 }
               ]
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
   summary:
     name: Deployment Summary
     runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-to-ecs, health-check]
-    if: always()
+    needs: [build-and-push, deploy-infra, deploy-business, health-check]
 
     steps:
       - name: Generate summary
         run: |
           echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "### Build & Deployment Info" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment:** Dev" >> $GITHUB_STEP_SUMMARY
           echo "- **PR Title:** ${{ inputs.pr_title }}" >> $GITHUB_STEP_SUMMARY
@@ -409,15 +746,16 @@ jobs:
           echo "- **Target Branch:** ${{ inputs.target_branch }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit SHA:** \`${{ inputs.commit_sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "### Job Results" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Build & Push | ${{ needs.build-and-push.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Deploy to ECS | ${{ needs.deploy-to-ecs.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deploy Infra | ${{ needs.deploy-infra.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deploy Business | ${{ needs.deploy-business.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Health Check | ${{ needs.health-check.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "### Services Deployed (12)" >> $GITHUB_STEP_SUMMARY
           echo "#### Infrastructure Services" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Config Server (8081)" >> $GITHUB_STEP_SUMMARY
@@ -435,19 +773,19 @@ jobs:
           echo "- ✅ Feedback Service (8090)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Notification Service (8091)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "### Container Registry" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "Registry: 962496666337.dkr.ecr.eu-west-1.amazonaws.com/sdt/dev/" >> $GITHUB_STEP_SUMMARY
           echo "Image Tag: ${{ inputs.commit_sha }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "### ECS Cluster" >> $GITHUB_STEP_SUMMARY
           echo "- **Cluster:** sdt-dev-cluster" >> $GITHUB_STEP_SUMMARY
           echo "- **Region:** eu-west-1" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ "${{ needs.health-check.result }}" == "success" ]; then
             echo "### ✅ Deployment Successful!" >> $GITHUB_STEP_SUMMARY
             echo "All services are healthy and running." >> $GITHUB_STEP_SUMMARY
@@ -455,3 +793,78 @@ jobs:
             echo "### ⚠️ Deployment Issues" >> $GITHUB_STEP_SUMMARY
             echo "Some jobs did not complete successfully. Check the logs above." >> $GITHUB_STEP_SUMMARY
           fi
+
+  rollback-on-failure:
+    name: Rollback Changed Services on Failure
+    runs-on: ubuntu-latest
+    needs: [detect-changes, deploy-infra, deploy-business, health-check]
+    if: needs.health-check.result == 'failure'
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Roll back infra services (if changed)
+        if: needs.detect-changes.outputs.infra_any == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a INFRA <<< "${{ needs.detect-changes.outputs.infra_csv }}"
+          for name in "${INFRA[@]}"; do
+            echo "Rolling back $name..."
+            # Get previous task definition ARN (second most recent)
+            PREV=$(aws ecs list-task-definitions \
+              --family-prefix sdt-dev-$name \
+              --sort DESC \
+              --max-items 2 \
+              --query 'taskDefinitionArns[-1]' \
+              --output text)
+            if [ -z "$PREV" ] || [ "$PREV" = "None" ]; then
+              echo "No previous task definition found for $name; skipping"
+              continue
+            fi
+            aws ecs update-service \
+              --cluster sdt-dev-cluster \
+              --service sdt-dev-$name \
+              --task-definition "$PREV" \
+              --force-new-deployment \
+              --no-cli-pager
+            aws ecs wait services-stable --cluster sdt-dev-cluster --services sdt-dev-$name
+            echo "✅ Rolled back $name to $PREV"
+          done
+
+      - name: Roll back business services (if changed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICES_JSON='${{ needs.detect-changes.outputs.business_services_json }}'
+          COUNT=$(jq 'length' <<<"$SERVICES_JSON")
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No business services changed; nothing to roll back."
+            exit 0
+          fi
+          for name in $(jq -r '.[].name' <<<"$SERVICES_JSON"); do
+            echo "Rolling back $name..."
+            PREV=$(aws ecs list-task-definitions \
+              --family-prefix sdt-dev-$name \
+              --sort DESC \
+              --max-items 2 \
+              --query 'taskDefinitionArns[-1]' \
+              --output text)
+            if [ -z "$PREV" ] || [ "$PREV" = "None" ]; then
+              echo "No previous task definition found for $name; skipping"
+              continue
+            fi
+            aws ecs update-service \
+              --cluster sdt-dev-cluster \
+              --service sdt-dev-$name \
+              --task-definition "$PREV" \
+              --force-new-deployment \
+              --no-cli-pager
+            aws ecs wait services-stable --cluster sdt-dev-cluster --services sdt-dev-$name
+            echo "✅ Rolled back $name to $PREV"
+          done

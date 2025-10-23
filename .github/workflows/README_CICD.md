@@ -135,12 +135,26 @@ DevOps Repository
 
 ## 🔧 Configuration
 
-### **Required GitHub Secrets**
+### ⚠️ **Important: Repository Setup**
 
-Set these in your DevOps repository:
+This workflow is designed to:
 
-```bash
-# AWS Credentials
+1. **Run in:** DevOps repository (`skill-tracker-devops`)
+2. **Build from:** Backend repository (contains microservices code)
+
+**The workflow checks out the backend repository** using the `repo_name` input parameter.
+
+---
+
+### Manual override: Force full build/deploy
+
+You can manually force a full rebuild and redeploy of all services regardless of changes detected.
+
+- **Input on reusable workflow:** `force_full_build: boolean` (default: `false`)
+- **Behavior when true:**
+  - Builds all images (infra + business)
+  - Deploys infra (ordered) and all business services
+  - Health check and notifications still run
 AWS_ACCESS_KEY_ID=<your-access-key>
 AWS_SECRET_ACCESS_KEY=<your-secret-key>
 AWS_REGION=eu-west-1
@@ -169,7 +183,6 @@ ECR_REPOSITORY_PREFIX: sdt/dev
 ```
 
 ---
-
 
 ## 📊 Workflow Execution Flow
 
@@ -354,4 +367,3 @@ docker build -f ./skilltracker-services/user-service/Dockerfile .
    ```
 3. Ensure secrets are accessible
 4. Verify VPC networking
-
