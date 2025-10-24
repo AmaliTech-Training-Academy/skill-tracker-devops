@@ -338,17 +338,21 @@ jobs:
                                  --arg arn_mn "$ARN_MONGO_NOTIFICATION" \
                                  --arg arn_pg "$ARN_PG_SCHEMAS" '
               [
-                {name:"JWT_SECRET",                valueFrom:($arn_jwt+":JWT_SECRET")},
-                {name:"HMAC_SECRET_KEY",           valueFrom:($arn_jwt+":HMAC_SECRET_KEY")},
-                {name:"HMAC_ALGORITHM",            valueFrom:($arn_jwt+":HMAC_ALGORITHM")},
-                {name:"GOOGLE_CLIENT_ID",          valueFrom:($arn_oauth+":GOOGLE_CLIENT_ID")},
-                {name:"GOOGLE_CLIENT_SECRET",      valueFrom:($arn_oauth+":GOOGLE_CLIENT_SECRET")},
-                {name:"MAIL_USERNAME",             valueFrom:($arn_mail+":MAIL_USERNAME")},
-                {name:"MAIL_PASSWORD",             valueFrom:($arn_mail+":MAIL_PASSWORD")},
-                {name:"RABBITMQ_USER",             valueFrom:($arn_mq+":RABBITMQ_USER")},
-                {name:"RABBITMQ_PASSWORD",         valueFrom:($arn_mq+":RABBITMQ_PASSWORD")},
-                {name:"REDIS_PASSWORD",            valueFrom:($arn_redis+":REDIS_PASSWORD")}
-              ]')
+                ($arn_jwt   | select(length>0) | {name:"JWT_SECRET",           valueFrom:(.+":JWT_SECRET::")}),
+                ($arn_jwt   | select(length>0) | {name:"HMAC_SECRET_KEY",      valueFrom:(.+":HMAC_SECRET_KEY::")}),
+                ($arn_jwt   | select(length>0) | {name:"HMAC_ALGORITHM",       valueFrom:(.+":HMAC_ALGORITHM::")}),
+                ($arn_oauth | select(length>0) | {name:"GOOGLE_CLIENT_ID",     valueFrom:(.+":GOOGLE_CLIENT_ID::")}),
+                ($arn_oauth | select(length>0) | {name:"GOOGLE_CLIENT_SECRET", valueFrom:(.+":GOOGLE_CLIENT_SECRET::")}),
+                ($arn_mail  | select(length>0) | {name:"MAIL_USERNAME",        valueFrom:(.+":MAIL_USERNAME::")}),
+                ($arn_mail  | select(length>0) | {name:"MAIL_PASSWORD",        valueFrom:(.+":MAIL_PASSWORD::")}),
+                ($arn_mq    | select(length>0) | {name:"RABBITMQ_USER",        valueFrom:(.+":RABBITMQ_USER::")}),
+                ($arn_mq    | select(length>0) | {name:"RABBITMQ_PASSWORD",    valueFrom:(.+":RABBITMQ_PASSWORD::")}),
+                ($arn_redis | select(length>0) | {name:"REDIS_PASSWORD",       valueFrom:(.+":REDIS_PASSWORD::")}),
+                ($arn_ma    | select(length>0) | {name:"MONGO_ANALYTICS_URI",  valueFrom:(.+":MONGO_ANALYTICS_URI::")}),
+                ($arn_mg    | select(length>0) | {name:"MONGO_GAMIFICATION_URI", valueFrom:(.+":MONGO_GAMIFICATION_URI::")}),
+                ($arn_mn    | select(length>0) | {name:"MONGO_NOTIFICATION_URI", valueFrom:(.+":MONGO_NOTIFICATION_URI::")}),
+                ($arn_pg    | select(length>0) | {name:"POSTGRES_SCHEMAS",     valueFrom:(.+":POSTGRES_SCHEMAS::")})
+              ] | map(select(. != null))')
 
             NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
               --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${SERVICE_NAME}:${{ inputs.commit_sha }}" \
@@ -497,33 +501,33 @@ jobs:
                                --arg arn_mn "$ARN_MONGO_NOTIFICATION" \
                                --arg arn_pg "$ARN_PG_SCHEMAS" '
             [
-              {name:"JWT_SECRET",                valueFrom:($arn_jwt+":JWT_SECRET")},
-              {name:"HMAC_SECRET_KEY",           valueFrom:($arn_jwt+":HMAC_SECRET_KEY")},
-              {name:"HMAC_ALGORITHM",            valueFrom:($arn_jwt+":HMAC_ALGORITHM")},
-              {name:"GOOGLE_CLIENT_ID",          valueFrom:($arn_oauth+":GOOGLE_CLIENT_ID")},
-              {name:"GOOGLE_CLIENT_SECRET",      valueFrom:($arn_oauth+":GOOGLE_CLIENT_SECRET")},
-              {name:"MAIL_USERNAME",             valueFrom:($arn_mail+":MAIL_USERNAME")},
-              {name:"MAIL_PASSWORD",             valueFrom:($arn_mail+":MAIL_PASSWORD")},
-              {name:"RABBITMQ_USER",             valueFrom:($arn_mq+":RABBITMQ_USER")},
-              {name:"RABBITMQ_PASSWORD",         valueFrom:($arn_mq+":RABBITMQ_PASSWORD")},
-              {name:"REDIS_PASSWORD",            valueFrom:($arn_redis+":REDIS_PASSWORD")},
-              {name:"MONGO_ANALYTICS_USER",      valueFrom:($arn_ma+":MONGO_ANALYTICS_USER")},
-              {name:"MONGO_ANALYTICS_PASSWORD",  valueFrom:($arn_ma+":MONGO_ANALYTICS_PASSWORD")},
-              {name:"MONGO_GAMIFICATION_USER",   valueFrom:($arn_mg+":MONGO_GAMIFICATION_USER")},
-              {name:"MONGO_GAMIFICATION_PASSWORD", valueFrom:($arn_mg+":MONGO_GAMIFICATION_PASSWORD")},
-              {name:"MONGO_NOTIFICATION_USER",   valueFrom:($arn_mn+":MONGO_NOTIFICATION_USER")},
-              {name:"MONGO_NOTIFICATION_PASSWORD", valueFrom:($arn_mn+":MONGO_NOTIFICATION_PASSWORD")},
-              {name:"POSTGRES_USER_USER",        valueFrom:($arn_pg+":POSTGRES_USER_USER")},
-              {name:"POSTGRES_USER_PASSWORD",    valueFrom:($arn_pg+":POSTGRES_USER_PASSWORD")},
-              {name:"POSTGRES_TASK_USER",        valueFrom:($arn_pg+":POSTGRES_TASK_USER")},
-              {name:"POSTGRES_TASK_PASSWORD",    valueFrom:($arn_pg+":POSTGRES_TASK_PASSWORD")},
-              {name:"POSTGRES_FEEDBACK_USER",    valueFrom:($arn_pg+":POSTGRES_FEEDBACK_USER")},
-              {name:"POSTGRES_FEEDBACK_PASSWORD",valueFrom:($arn_pg+":POSTGRES_FEEDBACK_PASSWORD")},
-              {name:"POSTGRES_PAYMENT_USER",     valueFrom:($arn_pg+":POSTGRES_PAYMENT_USER")},
-              {name:"POSTGRES_PAYMENT_PASSWORD", valueFrom:($arn_pg+":POSTGRES_PAYMENT_PASSWORD")},
-              {name:"POSTGRES_PRACTICE_USER",    valueFrom:($arn_pg+":POSTGRES_PRACTICE_USER")},
-              {name:"POSTGRES_PRACTICE_PASSWORD",valueFrom:($arn_pg+":POSTGRES_PRACTICE_PASSWORD")}
-            ]')
+              ($arn_jwt   | select(length>0) | {name:"JWT_SECRET",                   valueFrom:(.+":JWT_SECRET::")}),
+              ($arn_jwt   | select(length>0) | {name:"HMAC_SECRET_KEY",              valueFrom:(.+":HMAC_SECRET_KEY::")}),
+              ($arn_jwt   | select(length>0) | {name:"HMAC_ALGORITHM",               valueFrom:(.+":HMAC_ALGORITHM::")}),
+              ($arn_oauth | select(length>0) | {name:"GOOGLE_CLIENT_ID",             valueFrom:(.+":GOOGLE_CLIENT_ID::")}),
+              ($arn_oauth | select(length>0) | {name:"GOOGLE_CLIENT_SECRET",         valueFrom:(.+":GOOGLE_CLIENT_SECRET::")}),
+              ($arn_mail  | select(length>0) | {name:"MAIL_USERNAME",                valueFrom:(.+":MAIL_USERNAME::")}),
+              ($arn_mail  | select(length>0) | {name:"MAIL_PASSWORD",                valueFrom:(.+":MAIL_PASSWORD::")}),
+              ($arn_mq    | select(length>0) | {name:"RABBITMQ_USER",                valueFrom:(.+":RABBITMQ_USER::")}),
+              ($arn_mq    | select(length>0) | {name:"RABBITMQ_PASSWORD",            valueFrom:(.+":RABBITMQ_PASSWORD::")}),
+              ($arn_redis | select(length>0) | {name:"REDIS_PASSWORD",               valueFrom:(.+":REDIS_PASSWORD::")}),
+              ($arn_ma    | select(length>0) | {name:"MONGO_ANALYTICS_USER",         valueFrom:(.+":MONGO_ANALYTICS_USER::")}),
+              ($arn_ma    | select(length>0) | {name:"MONGO_ANALYTICS_PASSWORD",     valueFrom:(.+":MONGO_ANALYTICS_PASSWORD::")}),
+              ($arn_mg    | select(length>0) | {name:"MONGO_GAMIFICATION_USER",      valueFrom:(.+":MONGO_GAMIFICATION_USER::")}),
+              ($arn_mg    | select(length>0) | {name:"MONGO_GAMIFICATION_PASSWORD",  valueFrom:(.+":MONGO_GAMIFICATION_PASSWORD::")}),
+              ($arn_mn    | select(length>0) | {name:"MONGO_NOTIFICATION_USER",      valueFrom:(.+":MONGO_NOTIFICATION_USER::")}),
+              ($arn_mn    | select(length>0) | {name:"MONGO_NOTIFICATION_PASSWORD",  valueFrom:(.+":MONGO_NOTIFICATION_PASSWORD::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_USER_USER",           valueFrom:(.+":POSTGRES_USER_USER::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_USER_PASSWORD",       valueFrom:(.+":POSTGRES_USER_PASSWORD::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_TASK_USER",           valueFrom:(.+":POSTGRES_TASK_USER::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_TASK_PASSWORD",       valueFrom:(.+":POSTGRES_TASK_PASSWORD::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_FEEDBACK_USER",       valueFrom:(.+":POSTGRES_FEEDBACK_USER::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_FEEDBACK_PASSWORD",   valueFrom:(.+":POSTGRES_FEEDBACK_PASSWORD::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_PAYMENT_USER",        valueFrom:(.+":POSTGRES_PAYMENT_USER::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_PAYMENT_PASSWORD",    valueFrom:(.+":POSTGRES_PAYMENT_PASSWORD::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_PRACTICE_USER",       valueFrom:(.+":POSTGRES_PRACTICE_USER::")}),
+              ($arn_pg    | select(length>0) | {name:"POSTGRES_PRACTICE_PASSWORD",   valueFrom:(.+":POSTGRES_PRACTICE_PASSWORD::")})
+            ] | map(select(. != null))')
 
           echo "env_json=$ENV_JSON" >> "$GITHUB_OUTPUT"
           echo "secrets_json=$SECRETS_JSON" >> "$GITHUB_OUTPUT"
