@@ -172,7 +172,7 @@ module "rds" {
 
   db_name              = var.db_name
   db_username          = var.db_username
-  db_engine_version    = "16.3" # Updated to available version
+  db_engine_version    = "16.6" # Updated to available version
   db_instance_class    = "db.t3.micro"
   db_allocated_storage = 20
   db_storage_type      = "gp3"
@@ -264,135 +264,8 @@ module "api_gateway" {
   tags = local.common_tags
 }
 
-# Application Secrets
-resource "aws_secretsmanager_secret" "jwt" {
-  name        = "sdt-dev-app-secrets-jwt"
-  description = "JWT and HMAC secrets for backend"
-  tags        = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "mail" {
-  name        = "sdt-dev-app-secrets-mail"
-  description = "Mail configuration secrets"
-  tags        = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "mongo_analytics" {
-  name        = "sdt-dev-app-secrets-mongo-analytics"
-  description = "MongoDB analytics database credentials"
-  tags        = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "mongo_gamification" {
-  name        = "sdt-dev-app-secrets-mongo-gamification"
-  description = "MongoDB gamification database credentials"
-  tags        = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "mongo_notification" {
-  name        = "sdt-dev-app-secrets-mongo-notification"
-  description = "MongoDB notification database credentials"
-  tags        = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "mq" {
-  name        = "sdt-dev-app-secrets-mq"
-  description = "Message queue configuration"
-  tags        = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "oauth_google" {
-  name        = "sdt-dev-app-secrets-oauth-google"
-  description = "Google OAuth credentials"
-  tags        = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "postgres_schema_users" {
-  name        = "sdt-dev-app-secrets-postgres-schemas"
-  description = "PostgreSQL schema configurations"
-  tags        = local.common_tags
-}
-
-resource "aws_secretsmanager_secret" "redis" {
-  name        = "sdt-dev-app-secrets-redis"
-  description = "Redis configuration"
-  tags        = local.common_tags
-}
-
-# SSM Parameters for application configuration
-resource "aws_ssm_parameter" "aws_region" {
-  name  = "/sdt-dev/config/AWS_REGION"
-  type  = "String"
-  value = var.aws_region
-  tags  = local.common_tags
-}
-
-resource "aws_ssm_parameter" "base_url" {
-  name  = "/sdt-dev/endpoints/BASE_URL"
-  type  = "String"
-  value = module.api_gateway.api_gateway_url
-  tags  = local.common_tags
-}
-
-resource "aws_ssm_parameter" "config_server_uri" {
-  name  = "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
-  type  = "String"
-  value = "http://config-server.dev.sdt.local:8081"
-  tags  = local.common_tags
-}
-
-resource "aws_ssm_parameter" "eureka_zone" {
-  name  = "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
-  type  = "String"
-  value = "http://discovery-server.dev.sdt.local:8082/eureka"
-  tags  = local.common_tags
-}
-
-resource "aws_ssm_parameter" "log_level" {
-  name  = "/sdt-dev/config/LOG_LEVEL"
-  type  = "String"
-  value = "INFO"
-  tags  = local.common_tags
-}
-
-resource "aws_ssm_parameter" "mongo_analytics_db" {
-  name  = "/sdt-dev/mongo/analytics_db"
-  type  = "String"
-  value = "analytics"
-  tags  = local.common_tags
-}
-
-resource "aws_ssm_parameter" "mongo_gamification_db" {
-  name  = "/sdt-dev/mongo/gamification_db"
-  type  = "String"
-  value = "gamification"
-  tags  = local.common_tags
-}
-
-resource "aws_ssm_parameter" "mongo_notification_db" {
-  name  = "/sdt-dev/mongo/notification_db"
-  type  = "String"
-  value = "notification"
-  tags  = local.common_tags
-}
-
-resource "aws_ssm_parameter" "postgres_jdbc_base" {
-  name  = "/sdt-dev/db/JDBC_BASE"
-  type  = "String"
-  value = "jdbc:postgresql://${module.rds.db_instance_address}:5432"
-  tags  = local.common_tags
-}
-
-resource "aws_ssm_parameter" "spring_profile" {
-  name  = "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
-  type  = "String"
-  value = "dev"
-  tags  = local.common_tags
-}
-
-# Note: ECS services are managed by the ecs module above
-# The app_services module from main branch was removed to avoid conflicts
-}
+# Note: Application secrets and SSM parameters are defined in app-config.tf
+# ECS services are managed by the ecs module above
 
 # Amplify Module - Frontend (handled by colleague)
 module "amplify" {
