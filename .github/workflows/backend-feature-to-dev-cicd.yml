@@ -319,6 +319,7 @@ jobs:
               "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
               "/sdt-dev/config/LOG_LEVEL"
               "/sdt-dev/config/AWS_REGION"
+              "/sdt-dev/config/CONFIG_REPO"
               "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
               "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
               "/sdt-dev/endpoints/BASE_URL"
@@ -466,7 +467,11 @@ jobs:
             --task-definition sdt-dev-${{ matrix.service.name }} \
             --query 'taskDefinition' \
             --output json)
-          echo "task-def=$TASK_DEF" >> $GITHUB_OUTPUT
+          {
+            echo "task-def<<EOF"
+            echo "$TASK_DEF"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Build environment and secrets for task
         id: env-secrets
@@ -479,6 +484,7 @@ jobs:
             "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
             "/sdt-dev/config/LOG_LEVEL"
             "/sdt-dev/config/AWS_REGION"
+            "/sdt-dev/config/CONFIG_REPO"
             "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
             "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
             "/sdt-dev/endpoints/BASE_URL"
