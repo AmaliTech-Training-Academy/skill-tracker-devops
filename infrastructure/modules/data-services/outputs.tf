@@ -23,7 +23,7 @@ output "rabbitmq_secret_arn" {
   value       = aws_secretsmanager_secret.rabbitmq.arn
 }
 
-output "namespace_id" {
+output "service_discovery_namespace_id" {
   description = "ID of the service discovery namespace"
   value       = aws_service_discovery_private_dns_namespace.main.id
 }

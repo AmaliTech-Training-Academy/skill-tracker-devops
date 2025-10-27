@@ -1,37 +1,164 @@
-locals {
-  tg_enabled = var.target_group_arn != null && var.target_group_arn != ""
-}
-
-resource "aws_ecs_service" "service" {
-  for_each = { for s in var.services : s.name => s }
-
-  name            = "${var.project_name}-${var.environment}-${each.key}"
-  cluster         = var.cluster_id
-  desired_count   = each.value.desired_count
+# Discovery Server Service (starts first)
+resource "aws_ecs_service" "discovery_server" {
+  name            = "${var.project_name}-${var.environment}-discovery-server"
+  cluster         = var.ecs_cluster_id
+  task_definition = aws_ecs_task_definition.discovery_server.arn
+  desired_count   = 1
   launch_type     = "FARGATE"
-  task_definition = aws_ecs_task_definition.service[each.key].arn
 
   network_configuration {
-    subnets         = var.private_subnet_ids
-    security_groups = [var.ecs_security_group_id]
+    subnets          = var.private_subnet_ids
+    security_groups  = [var.ecs_security_group_id]
     assign_public_ip = false
   }
 
-  dynamic "load_balancer" {
-    for_each = (local.tg_enabled && each.key == "api-gateway") ? [1] : []
-    content {
-      target_group_arn = var.target_group_arn
-      container_name   = each.key
-      container_port   = each.value.port
+  service_registries {
+    registry_arn = aws_service_discovery_service.discovery_server.arn
+  }
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-${var.environment}-discovery-server-service"
+  })
+}
+
+# Config Server Service (starts after discovery server is healthy)
+resource "aws_ecs_service" "config_server" {
+  name            = "${var.project_name}-${var.environment}-config-server"
+  cluster         = var.ecs_cluster_id
+  task_definition = aws_ecs_task_definition.config_server.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [var.ecs_security_group_id]
+    assign_public_ip = false
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.config_server.arn
+  }
+
+  depends_on = [aws_ecs_service.discovery_server]
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-${var.environment}-config-server-service"
+  })
+}
+
+# API Gateway Service (starts after config server)
+resource "aws_ecs_service" "api_gateway" {
+  name            = "${var.project_name}-${var.environment}-api-gateway"
+  cluster         = var.ecs_cluster_id
+  task_definition = aws_ecs_task_definition.api_gateway.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [var.ecs_security_group_id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = var.alb_target_group_arn
+    container_name   = "api-gateway"
+    container_port   = 8080
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.api_gateway.arn
+  }
+
+  depends_on = [aws_ecs_service.config_server]
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-${var.environment}-api-gateway-service"
+  })
+}
+
+# User Service (starts after config server)
+resource "aws_ecs_service" "user_service" {
+  name            = "${var.project_name}-${var.environment}-user-service"
+  cluster         = var.ecs_cluster_id
+  task_definition = aws_ecs_task_definition.user_service.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [var.ecs_security_group_id]
+    assign_public_ip = false
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.user_service.arn
+  }
+
+  depends_on = [aws_ecs_service.config_server]
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-${var.environment}-user-service-service"
+  })
+}
+
+# Service Discovery Services
+resource "aws_service_discovery_service" "discovery_server" {
+  name = "discovery-server"
+
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+    
+    dns_records {
+      ttl  = 10
+      type = "A"
     }
   }
 
-  deployment_minimum_healthy_percent = 50
-  deployment_maximum_percent         = 200
+  # health_check_grace_period_seconds = 30
+}
 
-  enable_execute_command = true
+resource "aws_service_discovery_service" "config_server" {
+  name = "config-server"
 
-  lifecycle {
-    ignore_changes = [task_definition]
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+    
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
   }
+
+  # health_check_grace_period_seconds = 60
+}
+
+resource "aws_service_discovery_service" "api_gateway" {
+  name = "api-gateway"
+
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+    
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+  }
+
+  # health_check_grace_period_seconds = 90
+}
+
+resource "aws_service_discovery_service" "user_service" {
+  name = "user-service"
+
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+    
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+  }
+
+  # health_check_grace_period_seconds = 120
 }

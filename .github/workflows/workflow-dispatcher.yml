@@ -6,10 +6,38 @@ on:
       - backend-feature-to-dev-merged
       - backend-dev-to-staging-merged
       - backend-staging-to-prod-merged
+      - backend-devops-branch-merged
 
 jobs:
   build-dev-stage:
     if: github.event.action == 'backend-feature-to-dev-merged'
+    uses: ./.github/workflows/backend-feature-to-dev-cicd.yml
+    with:
+      pr_title: ${{ github.event.client_payload.pr_title }}
+      pr_author: ${{ github.event.client_payload.pr_author }}
+      pr_url: ${{ github.event.client_payload.pr_url }}
+      target_branch: ${{ github.event.client_payload.target_branch }}
+      commit_sha: ${{ github.event.client_payload.commit_sha }}
+      enable_ecs_deploy: ${{ github.event.client_payload.enable_ecs_deploy || true }}
+      force_full_build: ${{ github.event.client_payload.force_full_build || false }}
+    secrets:
+      BACKEND_REPO_NAME: ${{ secrets.BACKEND_REPO_NAME }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      ARN_APP_SECRETS_JWT: ${{ secrets.ARN_APP_SECRETS_JWT }}
+      ARN_APP_SECRETS_OAUTH_GOOGLE: ${{ secrets.ARN_APP_SECRETS_OAUTH_GOOGLE }}
+      ARN_APP_SECRETS_MAIL: ${{ secrets.ARN_APP_SECRETS_MAIL }}
+      ARN_APP_SECRETS_MQ: ${{ secrets.ARN_APP_SECRETS_MQ }}
+      ARN_APP_SECRETS_REDIS: ${{ secrets.ARN_APP_SECRETS_REDIS }}
+      ARN_APP_SECRETS_MONGO_ANALYTICS: ${{ secrets.ARN_APP_SECRETS_MONGO_ANALYTICS }}
+      ARN_APP_SECRETS_MONGO_GAMIFICATION: ${{ secrets.ARN_APP_SECRETS_MONGO_GAMIFICATION }}
+      ARN_APP_SECRETS_MONGO_NOTIFICATION: ${{ secrets.ARN_APP_SECRETS_MONGO_NOTIFICATION }}
+      ARN_APP_SECRETS_POSTGRES_SCHEMAS: ${{ secrets.ARN_APP_SECRETS_POSTGRES_SCHEMAS }}
+
+  build-devops-branch:
+    if: github.event.action == 'backend-devops-branch-merged'
     uses: ./.github/workflows/backend-feature-to-dev-cicd.yml
     with:
       pr_title: ${{ github.event.client_payload.pr_title }}

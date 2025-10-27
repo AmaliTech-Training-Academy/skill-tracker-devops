@@ -264,8 +264,32 @@ module "api_gateway" {
   tags = local.common_tags
 }
 
-# Note: Application secrets and SSM parameters are defined in app-config.tf
-# ECS services are managed by the ecs module above
+# Application Services Module - Microservices with proper startup order
+module "app_services" {
+  source = "../../modules/app-services"
+
+  project_name = local.project_name
+  environment  = local.environment
+  aws_region   = var.aws_region
+
+  ecs_cluster_id                   = module.ecs.cluster_id
+  private_subnet_ids               = module.networking.private_subnet_ids
+  ecs_security_group_id            = module.ecs.ecs_tasks_security_group_id
+  ecs_task_execution_role_arn      = module.iam.ecs_task_execution_role_arn
+  ecs_task_role_arn                = module.iam.ecs_task_role_arn
+  
+  ecr_repository_urls              = module.ecs.ecr_repository_urls
+  log_groups                       = module.ecs.log_groups
+  service_discovery_namespace_id   = module.data_services.service_discovery_namespace_id
+  service_discovery_namespace      = "${local.project_name}-${local.environment}.local"
+  alb_target_group_arn             = module.ecs.target_group_arn
+  
+  config_repo = "AmaliTech-Training-Academy/skill-tracker-configs"
+
+  tags = local.common_tags
+
+  depends_on = [module.data_services, module.ecs]
+}
 
 # Amplify Module - Frontend (handled by colleague)
 module "amplify" {
