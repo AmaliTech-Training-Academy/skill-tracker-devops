@@ -467,7 +467,11 @@ jobs:
             --task-definition sdt-dev-${{ matrix.service.name }} \
             --query 'taskDefinition' \
             --output json)
-          echo "task-def=$TASK_DEF" >> $GITHUB_OUTPUT
+          {
+            echo "task-def<<EOF"
+            echo "$TASK_DEF"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Build environment and secrets for task
         id: env-secrets
