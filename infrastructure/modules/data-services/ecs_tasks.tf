@@ -95,7 +95,7 @@ resource "aws_ecs_service" "mongodb" {
   name            = "${var.project_name}-${var.environment}-mongodb"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.mongodb.arn
-  desired_count   = 1
+  desired_count   = 0  # Disabled - not used by any deployed services
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -196,7 +196,7 @@ resource "aws_ecs_service" "redis" {
   name            = "${var.project_name}-${var.environment}-redis"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.redis.arn
-  desired_count   = 1
+  desired_count   = 0  # Disabled - only needed when task-service/user-service are deployed
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -310,7 +310,7 @@ resource "aws_ecs_service" "rabbitmq" {
   name            = "${var.project_name}-${var.environment}-rabbitmq"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.rabbitmq.arn
-  desired_count   = 1
+  desired_count   = 0  # Disabled - only needed when microservices with event messaging are deployed
   launch_type     = "FARGATE"
 
   network_configuration {

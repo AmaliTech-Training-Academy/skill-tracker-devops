@@ -68,7 +68,7 @@ module "ecs" {
   enable_container_insights = true
   log_retention_days        = 30
   create_alb                = true
-  health_check_path         = "/health"
+  health_check_path         = "/actuator/health"
 
   services = {
     api-gateway = {
@@ -160,7 +160,7 @@ module "ecs" {
   tags = local.common_tags
 }
 
-# RDS Module
+# RDS Module - PostgreSQL for user-service
 module "rds" {
   source = "../../modules/rds"
 
@@ -172,7 +172,7 @@ module "rds" {
 
   db_name              = var.db_name
   db_username          = var.db_username
-  db_engine_version    = "16.6" # Updated to available version
+  db_engine_version    = "16.8"
   db_instance_class    = "db.t3.micro"
   db_allocated_storage = 20
   db_storage_type      = "gp3"
@@ -281,10 +281,10 @@ module "app_services" {
   ecr_repository_urls              = module.ecs.ecr_repository_urls
   log_groups                       = module.ecs.log_groups
   service_discovery_namespace_id   = module.data_services.service_discovery_namespace_id
-  service_discovery_namespace      = "${local.project_name}-${local.environment}.local"
+  service_discovery_namespace      = "${local.environment}.${local.project_name}.local"
   alb_target_group_arn             = module.ecs.target_group_arn
   
-  config_repo = "AmaliTech-Training-Academy/skill-tracker-configs"
+  config_repo = "thenoblet/skilltracker-config"
 
   tags = local.common_tags
 

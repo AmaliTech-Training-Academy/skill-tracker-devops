@@ -48,12 +48,23 @@ resource "aws_security_group" "ecs_tasks" {
 # Security Group Rules for inter-service communication
 resource "aws_security_group_rule" "ecs_tasks_ingress" {
   type              = "ingress"
-  from_port         = var.container_port
-  to_port           = var.container_port
+  from_port         = 8080
+  to_port           = 8091
   protocol          = "tcp"
   security_group_id = aws_security_group.ecs_tasks.id
-  cidr_blocks       = [var.vpc_cidr]
-  description       = "Allow inbound traffic from VPC"
+  source_security_group_id = aws_security_group.ecs_tasks.id
+  description       = "Allow inter-service communication"
+}
+
+resource "aws_security_group_rule" "ecs_tasks_ingress_alb" {
+  count             = var.create_alb ? 1 : 0
+  type              = "ingress"
+  from_port         = 8080
+  to_port           = 8080
+  protocol          = "tcp"
+  security_group_id = aws_security_group.ecs_tasks.id
+  source_security_group_id = aws_security_group.alb[0].id
+  description       = "Allow traffic from ALB"
 }
 
 # Security Group for Application Load Balancer

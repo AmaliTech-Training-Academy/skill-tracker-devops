@@ -114,8 +114,6 @@ resource "aws_service_discovery_service" "discovery_server" {
       type = "A"
     }
   }
-
-  # health_check_grace_period_seconds = 30
 }
 
 resource "aws_service_discovery_service" "config_server" {
@@ -129,8 +127,6 @@ resource "aws_service_discovery_service" "config_server" {
       type = "A"
     }
   }
-
-  # health_check_grace_period_seconds = 60
 }
 
 resource "aws_service_discovery_service" "api_gateway" {
@@ -144,8 +140,6 @@ resource "aws_service_discovery_service" "api_gateway" {
       type = "A"
     }
   }
-
-  # health_check_grace_period_seconds = 90
 }
 
 resource "aws_service_discovery_service" "user_service" {
@@ -159,6 +153,4 @@ resource "aws_service_discovery_service" "user_service" {
       type = "A"
     }
   }
-
-  # health_check_grace_period_seconds = 120
 }

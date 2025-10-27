@@ -3,8 +3,8 @@ resource "aws_ecs_task_definition" "discovery_server" {
   family                   = "${var.project_name}-${var.environment}-discovery-server"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "512"
+  memory                   = "1024"
   execution_role_arn       = var.ecs_task_execution_role_arn
   task_role_arn           = var.ecs_task_role_arn
 
@@ -24,7 +24,7 @@ resource "aws_ecs_task_definition" "discovery_server" {
       environment = [
         {
           name  = "DISCOVERY_HOST"
-          value = "discovery-server.${var.service_discovery_namespace}"
+          value = "localhost"
         },
         {
           name  = "DISCOVERY_PORT"
@@ -42,7 +42,7 @@ resource "aws_ecs_task_definition" "discovery_server" {
       }
 
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:8082/actuator/health || exit 1"]
+        command     = ["CMD-SHELL", "nc -z localhost 8082 || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
@@ -59,8 +59,8 @@ resource "aws_ecs_task_definition" "config_server" {
   family                   = "${var.project_name}-${var.environment}-config-server"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "512"
+  memory                   = "1024"
   execution_role_arn       = var.ecs_task_execution_role_arn
   task_role_arn           = var.ecs_task_role_arn
 
@@ -79,8 +79,8 @@ resource "aws_ecs_task_definition" "config_server" {
 
       environment = [
         {
-          name  = "CONFIG_REPO"
-          value = var.config_repo
+          name  = "SPRING_CLOUD_CONFIG_SERVER_GIT_URI"
+          value = "https://github.com/${var.config_repo}"
         },
         {
           name  = "DISCOVERY_HOST"
@@ -102,11 +102,11 @@ resource "aws_ecs_task_definition" "config_server" {
       }
 
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1"]
-        interval    = 30
-        timeout     = 5
-        retries     = 3
-        startPeriod = 60
+        command     = ["CMD-SHELL", "nc -z localhost 8081 || exit 1"]
+        interval    = 60
+        timeout     = 10
+        retries     = 5
+        startPeriod = 180
       }
     }
   ])
@@ -166,7 +166,7 @@ resource "aws_ecs_task_definition" "api_gateway" {
       }
 
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+        command     = ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
@@ -217,6 +217,45 @@ resource "aws_ecs_task_definition" "user_service" {
         {
           name  = "DISCOVERY_PORT"
           value = "8082"
+        },
+        {
+          name  = "SPRING_PROFILES_ACTIVE"
+          value = "dev"
+        },
+        {
+          name  = "SPRING_SQL_INIT_MODE"
+          value = "never"
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "JWT_SECRET"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:JWT_SECRET::"
+        },
+        {
+          name      = "HMAC_SECRET_KEY"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:HMAC_SECRET_KEY::"
+        },
+        {
+          name      = "HMAC_ALGORITHM"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:HMAC_ALGORITHM::"
+        },
+        {
+          name      = "JWT_EXPIRATION"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:JWT_EXPIRATION::"
+        },
+        {
+          name      = "JWT_ACCESS_EXPIRATION"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:JWT_ACCESS_EXPIRATION::"
+        },
+        {
+          name      = "JWT_REFRESH_EXPIRATION"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:JWT_REFRESH_EXPIRATION::"
+        },
+        {
+          name      = "RESET_TOKEN_EXPIRATION"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:RESET_TOKEN_EXPIRATION::"
         }
       ]
 
@@ -230,7 +269,7 @@ resource "aws_ecs_task_definition" "user_service" {
       }
 
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:8084/actuator/health || exit 1"]
+        command     = ["CMD-SHELL", "nc -z localhost 8084 || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
