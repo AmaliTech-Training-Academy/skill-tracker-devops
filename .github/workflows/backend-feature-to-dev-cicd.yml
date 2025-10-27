@@ -96,25 +96,18 @@ jobs:
           set -euo pipefail
 
           # Define services mapping
+          # FOCUS SERVICES ONLY: Core infrastructure + User service + Data services
           NAMES=(
             config-server discovery-server api-gateway
-            bff-service user-service task-service analytics-service payment-service gamification-service practice-service feedback-service notification-service
+            user-service
           )
           PATHS=(
             skilltracker-infra/config-server
             skilltracker-infra/discovery-server
             skilltracker-infra/api-gateway
-            skilltracker-services/bff-service
             skilltracker-services/user-service
-            skilltracker-services/task-service
-            skilltracker-services/analytics-service
-            skilltracker-services/payment-service
-            skilltracker-services/gamification-service
-            skilltracker-services/practice-service
-            skilltracker-services/feedback-service
-            skilltracker-services/notification-service
           )
-          PORTS=(8081 8082 8080 8083 8084 8085 8086 8087 8088 8089 8090 8091)
+          PORTS=(8081 8082 8080 8084)
 
           # If manual override is enabled, output all services and exit
           if [ "${{ inputs.force_full_build }}" = "true" ]; then
