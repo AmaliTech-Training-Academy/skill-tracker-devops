@@ -1,34 +1,76 @@
-variable "project_name" { type = string }
-variable "environment"  { type = string }
-
-variable "cluster_id"   { type = string }
-variable "private_subnet_ids" { type = list(string) }
-variable "ecs_security_group_id" { type = string }
-
-variable "task_role_arn" {
-  description = "IAM role ARN assumed by the task (application permissions)"
+variable "project_name" {
+  description = "Project name"
   type        = string
 }
 
-variable "execution_role_arn" {
-  description = "IAM role ARN used by the ECS agent to pull images and publish logs"
+variable "environment" {
+  description = "Environment name"
   type        = string
 }
 
-variable "target_group_arn" { type = string } # For api-gateway only; can be null
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+}
 
-variable "log_groups" {
-  description = "Map of log group names keyed by service name"
+variable "ecs_cluster_id" {
+  description = "ECS cluster ID"
+  type        = string
+}
+
+variable "private_subnet_ids" {
+  description = "Private subnet IDs"
+  type        = list(string)
+}
+
+variable "ecs_security_group_id" {
+  description = "ECS security group ID"
+  type        = string
+}
+
+variable "ecs_task_execution_role_arn" {
+  description = "ECS task execution role ARN"
+  type        = string
+}
+
+variable "ecs_task_role_arn" {
+  description = "ECS task role ARN"
+  type        = string
+}
+
+variable "ecr_repository_urls" {
+  description = "ECR repository URLs"
   type        = map(string)
 }
 
-variable "services" {
-  description = "List of services to create"
-  type = list(object({
-    name          = string
-    port          = number
-    desired_count = number
-    cpu           = number
-    memory        = number
-  }))
+variable "log_groups" {
+  description = "CloudWatch log groups"
+  type        = map(string)
+}
+
+variable "service_discovery_namespace_id" {
+  description = "Service discovery namespace ID"
+  type        = string
+}
+
+variable "service_discovery_namespace" {
+  description = "Service discovery namespace name"
+  type        = string
+}
+
+variable "alb_target_group_arn" {
+  description = "ALB target group ARN"
+  type        = string
+}
+
+variable "config_repo" {
+  description = "Git repository for configuration"
+  type        = string
+  default     = "AmaliTech-Training-Academy/skill-tracker-configs"
+}
+
+variable "tags" {
+  description = "Tags to apply to resources"
+  type        = map(string)
+  default     = {}
 }

@@ -27,10 +27,6 @@ resource "aws_service_discovery_service" "mongodb" {
     routing_policy = "MULTIVALUE"
   }
 
-  health_check_custom_config {
-    failure_threshold = 1
-  }
-
   tags = merge(
     var.tags,
     {
@@ -54,10 +50,6 @@ resource "aws_service_discovery_service" "redis" {
     routing_policy = "MULTIVALUE"
   }
 
-  health_check_custom_config {
-    failure_threshold = 1
-  }
-
   tags = merge(
     var.tags,
     {
@@ -79,10 +71,6 @@ resource "aws_service_discovery_service" "rabbitmq" {
     }
 
     routing_policy = "MULTIVALUE"
-  }
-
-  health_check_custom_config {
-    failure_threshold = 1
   }
 
   tags = merge(

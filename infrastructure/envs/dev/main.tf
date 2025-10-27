@@ -68,7 +68,7 @@ module "ecs" {
   enable_container_insights = true
   log_retention_days        = 30
   create_alb                = true
-  health_check_path         = "/health"
+  health_check_path         = "/actuator/health"
 
   services = {
     api-gateway = {
@@ -160,7 +160,7 @@ module "ecs" {
   tags = local.common_tags
 }
 
-# RDS Module
+# RDS Module - PostgreSQL for user-service
 module "rds" {
   source = "../../modules/rds"
 
@@ -172,7 +172,7 @@ module "rds" {
 
   db_name              = var.db_name
   db_username          = var.db_username
-  db_engine_version    = "16.6" # Updated to available version
+  db_engine_version    = "16.8"
   db_instance_class    = "db.t3.micro"
   db_allocated_storage = 20
   db_storage_type      = "gp3"
@@ -264,8 +264,32 @@ module "api_gateway" {
   tags = local.common_tags
 }
 
-# Note: Application secrets and SSM parameters are defined in app-config.tf
-# ECS services are managed by the ecs module above
+# Application Services Module - Microservices with proper startup order
+module "app_services" {
+  source = "../../modules/app-services"
+
+  project_name = local.project_name
+  environment  = local.environment
+  aws_region   = var.aws_region
+
+  ecs_cluster_id                   = module.ecs.cluster_id
+  private_subnet_ids               = module.networking.private_subnet_ids
+  ecs_security_group_id            = module.ecs.ecs_tasks_security_group_id
+  ecs_task_execution_role_arn      = module.iam.ecs_task_execution_role_arn
+  ecs_task_role_arn                = module.iam.ecs_task_role_arn
+  
+  ecr_repository_urls              = module.ecs.ecr_repository_urls
+  log_groups                       = module.ecs.log_groups
+  service_discovery_namespace_id   = module.data_services.service_discovery_namespace_id
+  service_discovery_namespace      = "${local.environment}.${local.project_name}.local"
+  alb_target_group_arn             = module.ecs.target_group_arn
+  
+  config_repo = "thenoblet/skilltracker-config"
+
+  tags = local.common_tags
+
+  depends_on = [module.data_services, module.ecs]
+}
 
 # Amplify Module - Frontend (handled by colleague)
 module "amplify" {
