@@ -284,6 +284,10 @@ module "app_services" {
   service_discovery_namespace      = "${local.environment}.${local.project_name}.local"
   alb_target_group_arn             = module.ecs.target_group_arn
   
+  rds_endpoint                     = module.rds.db_instance_endpoint
+  rds_db_name                      = module.rds.db_name
+  rds_secret_arn                   = module.rds.secrets_manager_secret_arn
+  
   config_repo = "thenoblet/skilltracker-config"
 
   tags = local.common_tags
