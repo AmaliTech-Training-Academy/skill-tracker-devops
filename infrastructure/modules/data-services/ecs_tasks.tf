@@ -140,15 +140,7 @@ resource "aws_ecs_task_definition" "redis" {
         }
       ]
 
-      command = ["redis-server", "--appendonly", "yes"]
-
-      mountPoints = [
-        {
-          sourceVolume  = "redis-data"
-          containerPath = "/data"
-          readOnly      = false
-        }
-      ]
+      command = ["redis-server"]
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -169,20 +161,6 @@ resource "aws_ecs_task_definition" "redis" {
     }
   ])
 
-  volume {
-    name = "redis-data"
-
-    efs_volume_configuration {
-      file_system_id     = var.efs_file_system_id
-      transit_encryption = "ENABLED"
-      
-      authorization_config {
-        access_point_id = var.redis_access_point_id
-        iam             = "ENABLED"
-      }
-    }
-  }
-
   tags = merge(
     var.tags,
     {
@@ -196,7 +174,7 @@ resource "aws_ecs_service" "redis" {
   name            = "${var.project_name}-${var.environment}-redis"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.redis.arn
-  desired_count   = 0  # Disabled - only needed when task-service/user-service are deployed
+  desired_count   = 1  # Enabled for user-service login/session management
   launch_type     = "FARGATE"
 
   network_configuration {
