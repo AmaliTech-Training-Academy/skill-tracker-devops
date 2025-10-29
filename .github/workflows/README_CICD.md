@@ -155,24 +155,29 @@ You can manually force a full rebuild and redeploy of all services regardless of
   - Builds all images (infra + business)
   - Deploys infra (ordered) and all business services
   - Health check and notifications still run
-AWS_ACCESS_KEY_ID=<your-access-key>
-AWS_SECRET_ACCESS_KEY=<your-secret-key>
-AWS_REGION=eu-west-1
+    AWS_ACCESS_KEY_ID=<your-access-key>
+    AWS_SECRET_ACCESS_KEY=<your-secret-key>
+    AWS_REGION=eu-west-1
 
 # ECR
+
 ECR_REPOSITORY=962496666337.dkr.ecr.eu-west-1.amazonaws.com
 
 # ECS
+
 ECS_CLUSTER=sdt-dev-cluster
-ECS_SERVICE=sdt-dev-*  # Pattern for service names
+ECS_SERVICE=sdt-dev-\* # Pattern for service names
 
 # Notifications
+
 SLACK_WEBHOOK_URL=<your-slack-webhook>
 
 # GitHub Access
+
 PERSONAL_ACCESS_TOKEN=<github-pat-with-repo-access>
 TARGET_REPO=<backend-repo-name>
-```
+
+````
 
 ### **Environment Variables** (in workflow)
 
@@ -180,7 +185,7 @@ TARGET_REPO=<backend-repo-name>
 AWS_REGION: eu-west-1
 ECR_REGISTRY: 962496666337.dkr.ecr.eu-west-1.amazonaws.com
 ECR_REPOSITORY_PREFIX: sdt/dev
-```
+````
 
 ---
 
@@ -367,3 +372,30 @@ docker build -f ./skilltracker-services/user-service/Dockerfile .
    ```
 3. Ensure secrets are accessible
 4. Verify VPC networking
+
+### Flow
+
+```mermaid
+graph TD
+    A[PR Merged] --> B[Detect Changes]
+    B --> C{Changes Found?}
+    C -->|Yes| D[Build & Push Changed Services]
+    C -->|No| E[Skip Pipeline]
+
+    D --> F{Infra Changes?}
+    F -->|Yes| G[Deploy Infra Sequential]
+    F -->|No| H[Skip Infra Deploy]
+
+    G --> I[Deploy Business Parallel]
+    H --> I
+
+    I --> J[Health Check All Services]
+    J --> K{All Healthy?}
+    K -->|Yes| L[Notify Success]
+    K -->|No| M[Rollback Changed Services]
+
+    L --> N[Generate Summary]
+    M --> O[Notify Failure]
+    O --> N
+    N --> P[End]
+```
