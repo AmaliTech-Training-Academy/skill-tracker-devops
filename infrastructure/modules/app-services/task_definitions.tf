@@ -156,6 +156,13 @@ resource "aws_ecs_task_definition" "api_gateway" {
         }
       ]
 
+      secrets = [
+        {
+          name      = "JWT_SECRET"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:JWT_SECRET::"
+        }
+      ]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
