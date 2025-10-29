@@ -164,15 +164,12 @@ jobs:
     needs: validate-inputs
     
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
       - name: Checkout backend repository
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.BACKEND_REPO_NAME }}
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          path: backend
+          fetch-depth: 0
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -207,11 +204,11 @@ jobs:
       - name: Debug backend repository structure
         run: |
           echo "📁 Checking backend repository structure..."
-          ls -la backend/ || echo "❌ Backend directory not found"
-          find backend/ -maxdepth 2 -type d -name "*task*" || echo "❌ No task-related directories found"
-          find backend/ -maxdepth 2 -type d -name "*service*" || echo "❌ No service directories found"
-          echo "📋 All directories in backend/:"
-          find backend/ -maxdepth 2 -type d | head -20
+          ls -la . || echo "❌ Current directory listing failed"
+          find . -maxdepth 2 -type d -name "*task*" || echo "❌ No task-related directories found"
+          find . -maxdepth 2 -type d -name "*service*" || echo "❌ No service directories found"
+          echo "📋 All directories in current path:"
+          find . -maxdepth 2 -type d | head -20
       
       - name: Build and push Docker image
         if: inputs.force_rebuild == true || steps.check-image.outputs.skip_build == 'false'
@@ -221,20 +218,24 @@ jobs:
           IMAGE_TAG="${{ needs.validate-inputs.outputs.image_tag }}"
           
           echo "🔨 Building $SERVICE_NAME from $SERVICE_PATH"
-          echo "📁 Looking for: backend/$SERVICE_PATH"
+          echo "📁 Looking for: ./$SERVICE_PATH"
           
           # Check if the path exists
-          if [ ! -d "backend/$SERVICE_PATH" ]; then
-            echo "❌ Directory backend/$SERVICE_PATH does not exist"
+          if [ ! -d "./$SERVICE_PATH" ]; then
+            echo "❌ Directory ./$SERVICE_PATH does not exist"
             echo "📋 Available directories:"
-            find backend/ -maxdepth 2 -type d | grep -E "(task|service)" || echo "No matching directories found"
+            find . -maxdepth 2 -type d | grep -E "(task|service)" || echo "No matching directories found"
             exit 1
           fi
           
-          cd backend/$SERVICE_PATH
+          echo "✅ Found service directory: ./$SERVICE_PATH"
           
-          # Build Docker image
-          docker build -t $SERVICE_NAME:$IMAGE_TAG .
+          # Build Docker image (from root, like main workflow)
+          echo "🔨 Building Docker image..."
+          docker build \
+            -f ./$SERVICE_PATH/Dockerfile \
+            -t $SERVICE_NAME:$IMAGE_TAG \
+            .
           
           # Tag for ECR
           docker tag $SERVICE_NAME:$IMAGE_TAG \
@@ -261,7 +262,7 @@ jobs:
     needs: [validate-inputs, build-service]
     
     steps:
-      - name: Checkout repository
+      - name: Checkout devops repository (for slack action)
         uses: actions/checkout@v4
       
       - name: Configure AWS credentials
