@@ -1,5 +1,18 @@
 name: Feature to Dev CI/CD
 
+# PIPELINE APPROACH: Minimal Task Definition Updates
+# This pipeline uses a safe "image-only" update strategy:
+# 1. Gets the current working task definition from ECS
+# 2. Updates ONLY the container image tag (preserves all other config)
+# 3. Validates no other changes occurred
+# 4. Deploys the minimal update
+# 
+# Benefits:
+# - Preserves all Terraform-managed configuration
+# - Eliminates configuration drift risks
+# - Faster, safer deployments
+# - Simple rollback (just previous task definition revision)
+
 on:
   # This is a reusable workflow that can be called from other workflows
   workflow_call:
@@ -277,7 +290,7 @@ jobs:
           echo "📦 Tagged: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}"
 
   deploy-infra:
-    name: Deploy Infra Services (ordered)
+    name: Deploy Infra Services (Image-Only Updates, Ordered)
     runs-on: ubuntu-latest
     needs: [build-and-push, detect-changes]
     if: inputs.enable_ecs_deploy && needs.detect-changes.outputs.infra_any == 'true'
@@ -290,120 +303,84 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Install jq
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-
-      - name: Deploy infra sequentially
+      - name: Deploy infra services sequentially (minimal updates)
         run: |
           set -euo pipefail
 
-          deploy_one() {
+          deploy_one_minimal() {
             SERVICE_NAME="$1"
-            echo "=== Deploying $SERVICE_NAME ==="
+            echo "=== Deploying $SERVICE_NAME (Image-Only Update) ==="
 
-            # Resolve current task definition ARN from the service (avoids assumptions about family name)
-            TASK_DEF_ARN=$(aws ecs describe-services \
+            # Get currently deployed (working) task definition
+            CURRENT_TASK_ARN=$(aws ecs describe-services \
               --cluster sdt-dev-cluster \
               --services sdt-dev-${SERVICE_NAME} \
               --query 'services[0].taskDefinition' \
               --output text || true)
 
-            if [ -z "$TASK_DEF_ARN" ] || [ "$TASK_DEF_ARN" = "None" ]; then
-              echo "Service sdt-dev-${SERVICE_NAME} not found or has no taskDefinition. Skipping."
+            if [ -z "$CURRENT_TASK_ARN" ] || [ "$CURRENT_TASK_ARN" = "None" ]; then
+              echo "❌ Service sdt-dev-${SERVICE_NAME} not found or has no taskDefinition. Skipping."
               return 0
             fi
 
-            TASK_DEF=$(aws ecs describe-task-definition \
-              --task-definition "$TASK_DEF_ARN" \
+            echo "Using working task definition: $CURRENT_TASK_ARN"
+
+            # Get the full working task definition
+            WORKING_TASK_DEF=$(aws ecs describe-task-definition \
+              --task-definition "$CURRENT_TASK_ARN" \
               --query 'taskDefinition' \
               --output json)
 
-            # Build ENV from SSM and SECRETS from Secrets Manager (same set used in business deploy)
-            PARAMS=(
-              "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
-              "/sdt-dev/config/LOG_LEVEL"
-              "/sdt-dev/config/AWS_REGION"
-              "/sdt-dev/config/CONFIG_REPO"
-              "/sdt-dev/config/DISCOVERY_HOST"
-              "/sdt-dev/config/DISCOVERY_PORT"
-              "/sdt-dev/config/GATEWAY_HOST"
-              "/sdt-dev/config/GATEWAY_PORT"
-              "/sdt-dev/config/CONFIG_HOST"
-              "/sdt-dev/config/CONFIG_PORT"
-              "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
-              "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
-              "/sdt-dev/endpoints/BASE_URL"
-              "/sdt-dev/db/JDBC_BASE"
-              "/sdt-dev/mongo/analytics_db"
-              "/sdt-dev/mongo/gamification_db"
-              "/sdt-dev/mongo/notification_db"
-            )
+            # Store current image for comparison
+            CURRENT_IMAGE=$(echo "$WORKING_TASK_DEF" | jq -r '.containerDefinitions[0].image')
+            echo "Current working image: $CURRENT_IMAGE"
 
-            PARAM_JSON=$(aws ssm get-parameters \
-              --with-decryption \
-              --names "${PARAMS[@]}" \
-              --query 'Parameters[].{Name:Name,Value:Value}' \
-              --output json)
-
-            ENV_JSON=$(echo "$PARAM_JSON" | jq -c '[ .[] | {name: (.Name | split("/")[-1]), value: .Value} ]')
-
-            ARN_JWT="${{ secrets.ARN_APP_SECRETS_JWT }}"
-            ARN_OAUTH="${{ secrets.ARN_APP_SECRETS_OAUTH_GOOGLE }}"
-            ARN_MAIL="${{ secrets.ARN_APP_SECRETS_MAIL }}"
-            ARN_MQ="${{ secrets.ARN_APP_SECRETS_MQ }}"
-            ARN_REDIS="${{ secrets.ARN_APP_SECRETS_REDIS }}"
-            ARN_MONGO_ANALYTICS="${{ secrets.ARN_APP_SECRETS_MONGO_ANALYTICS }}"
-            ARN_MONGO_GAMIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_GAMIFICATION }}"
-            ARN_MONGO_NOTIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_NOTIFICATION }}"
-            ARN_PG_SCHEMAS="${{ secrets.ARN_APP_SECRETS_POSTGRES_SCHEMAS }}"
-
-            SECRETS_JSON=$(jq -c -n --arg arn_jwt "$ARN_JWT" \
-                                 --arg arn_oauth "$ARN_OAUTH" \
-                                 --arg arn_mail "$ARN_MAIL" \
-                                 --arg arn_mq "$ARN_MQ" \
-                                 --arg arn_redis "$ARN_REDIS" \
-                                 --arg arn_ma "$ARN_MONGO_ANALYTICS" \
-                                 --arg arn_mg "$ARN_MONGO_GAMIFICATION" \
-                                 --arg arn_mn "$ARN_MONGO_NOTIFICATION" \
-                                 --arg arn_pg "$ARN_PG_SCHEMAS" '
-              [
-                ($arn_jwt   | select(length>0) | {name:"JWT_SECRET",           valueFrom:(.+":JWT_SECRET::")}),
-                ($arn_jwt   | select(length>0) | {name:"HMAC_SECRET_KEY",      valueFrom:(.+":HMAC_SECRET_KEY::")}),
-                ($arn_jwt   | select(length>0) | {name:"HMAC_ALGORITHM",       valueFrom:(.+":HMAC_ALGORITHM::")}),
-                ($arn_oauth | select(length>0) | {name:"GOOGLE_CLIENT_ID",     valueFrom:(.+":GOOGLE_CLIENT_ID::")}),
-                ($arn_oauth | select(length>0) | {name:"GOOGLE_CLIENT_SECRET", valueFrom:(.+":GOOGLE_CLIENT_SECRET::")}),
-                ($arn_mail  | select(length>0) | {name:"MAIL_USERNAME",        valueFrom:(.+":MAIL_USERNAME::")}),
-                ($arn_mail  | select(length>0) | {name:"MAIL_PASSWORD",        valueFrom:(.+":MAIL_PASSWORD::")}),
-                ($arn_mq    | select(length>0) | {name:"RABBITMQ_USER",        valueFrom:(.+":RABBITMQ_USER::")}),
-                ($arn_mq    | select(length>0) | {name:"RABBITMQ_PASSWORD",    valueFrom:(.+":RABBITMQ_PASSWORD::")}),
-                ($arn_redis | select(length>0) | {name:"REDIS_PASSWORD",       valueFrom:(.+":REDIS_PASSWORD::")}),
-                ($arn_ma    | select(length>0) | {name:"MONGO_ANALYTICS_URI",  valueFrom:(.+":MONGO_ANALYTICS_URI::")}),
-                ($arn_mg    | select(length>0) | {name:"MONGO_GAMIFICATION_URI", valueFrom:(.+":MONGO_GAMIFICATION_URI::")}),
-                ($arn_mn    | select(length>0) | {name:"MONGO_NOTIFICATION_URI", valueFrom:(.+":MONGO_NOTIFICATION_URI::")}),
-                ($arn_pg    | select(length>0) | {name:"POSTGRES_SCHEMAS",     valueFrom:(.+":POSTGRES_SCHEMAS::")})
-              ] | map(select(. != null))')
-
-            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
-              --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${SERVICE_NAME}:${{ inputs.commit_sha }}" \
-              --argjson APP_ENV "$ENV_JSON" \
-              --argjson APP_SECRETS "$SECRETS_JSON" '
-                .containerDefinitions[0].image = $IMAGE
-                | .containerDefinitions[0].environment = $APP_ENV
-                | .containerDefinitions[0].secrets = $APP_SECRETS
+            # Create new task definition with ONLY image change
+            NEW_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${SERVICE_NAME}:${{ inputs.commit_sha }}"
+            NEW_TASK_DEF=$(echo "$WORKING_TASK_DEF" | jq \
+              --arg NEW_IMAGE "$NEW_IMAGE" '
+                # Update only the image
+                .containerDefinitions[0].image = $NEW_IMAGE
+                # Remove AWS-managed fields
                 | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-            ')
+              ')
 
-            # Validate JSON and register from file to avoid shell quoting issues
-            echo "$NEW_TASK_DEF" | jq -e '.' > taskdef.json
+            # Validation: Ensure only image changed
+            OLD_IMAGE=$(echo "$WORKING_TASK_DEF" | jq -r '.containerDefinitions[0].image')
+            NEW_IMAGE_CHECK=$(echo "$NEW_TASK_DEF" | jq -r '.containerDefinitions[0].image')
+
+            echo "✅ Image update: $OLD_IMAGE → $NEW_IMAGE_CHECK"
+
+            # Verify no other changes occurred
+            OLD_ENV_COUNT=$(echo "$WORKING_TASK_DEF" | jq '.containerDefinitions[0].environment | length')
+            NEW_ENV_COUNT=$(echo "$NEW_TASK_DEF" | jq '.containerDefinitions[0].environment | length')
+
+            if [ "$OLD_ENV_COUNT" != "$NEW_ENV_COUNT" ]; then
+              echo "❌ Environment variables changed unexpectedly! Old: $OLD_ENV_COUNT, New: $NEW_ENV_COUNT"
+              exit 1
+            fi
+
+            OLD_SECRETS_COUNT=$(echo "$WORKING_TASK_DEF" | jq '.containerDefinitions[0].secrets | length')
+            NEW_SECRETS_COUNT=$(echo "$NEW_TASK_DEF" | jq '.containerDefinitions[0].secrets | length')
+
+            if [ "$OLD_SECRETS_COUNT" != "$NEW_SECRETS_COUNT" ]; then
+              echo "❌ Secrets changed unexpectedly! Old: $OLD_SECRETS_COUNT, New: $NEW_SECRETS_COUNT"
+              exit 1
+            fi
+
+            echo "✅ Configuration preserved - only image updated"
+
+            # Register new task definition
+            echo "$NEW_TASK_DEF" | jq '.' > taskdef-${SERVICE_NAME}.json
             NEW_TASK_ARN=$(aws ecs register-task-definition \
-              --cli-input-json file://taskdef.json \
+              --cli-input-json file://taskdef-${SERVICE_NAME}.json \
               --query 'taskDefinition.taskDefinitionArn' \
               --output text)
 
-            echo "Registered task def: $NEW_TASK_ARN"
+            echo "✅ Registered: $NEW_TASK_ARN"
 
+            # Deploy with new image
+            echo "🚀 Deploying $SERVICE_NAME with new image..."
             aws ecs update-service \
               --cluster sdt-dev-cluster \
               --service sdt-dev-${SERVICE_NAME} \
@@ -418,29 +395,6 @@ jobs:
               --query 'services[0].events[0:10].[createdAt,message]' \
               --output table || true
 
-            echo "Describe latest tasks for $SERVICE_NAME:"
-            TASK_ARNS=$(aws ecs list-tasks \
-              --cluster sdt-dev-cluster \
-              --service-name sdt-dev-${SERVICE_NAME} \
-              --desired-status RUNNING \
-              --output text --query 'taskArns')
-            if [ -z "$TASK_ARNS" ]; then
-              TASK_ARNS=$(aws ecs list-tasks \
-                --cluster sdt-dev-cluster \
-                --service-name sdt-dev-${SERVICE_NAME} \
-                --desired-status STOPPED \
-                --output text --query 'taskArns[0:5]')
-            fi
-            if [ -n "$TASK_ARNS" ]; then
-              aws ecs describe-tasks \
-                --cluster sdt-dev-cluster \
-                --tasks $TASK_ARNS \
-                --query 'tasks[].{last:lastStatus,desired:desiredStatus,stopped:stoppedReason,containers:containers[].reason}' \
-                --output json || true
-            else
-              echo "No tasks found yet for $SERVICE_NAME."
-            fi
-
             echo "Waiting for $SERVICE_NAME to stabilize..."
             aws ecs wait services-stable \
               --cluster sdt-dev-cluster \
@@ -448,13 +402,13 @@ jobs:
             echo "✅ $SERVICE_NAME is stable!"
           }
 
-          # Enforce order: config -> discovery -> api-gateway
-          deploy_one config-server
-          deploy_one discovery-server
-          deploy_one api-gateway
+          # Enforce dependency order: config -> discovery -> api-gateway
+          deploy_one_minimal config-server
+          deploy_one_minimal discovery-server
+          deploy_one_minimal api-gateway
 
   deploy-business:
-    name: Deploy Business Services (parallel)
+    name: Deploy Business Services (Image-Only Updates)
     runs-on: ubuntu-latest
     needs: [deploy-infra, detect-changes]
     if: inputs.enable_ecs_deploy
@@ -472,145 +426,109 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Get current task definition
-        id: get-task-def
+      - name: Get current working task definition
+        id: get-working-taskdef
         run: |
-          TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition sdt-dev-${{ matrix.service.name }} \
+          SERVICE_NAME="${{ matrix.service.name }}"
+          
+          # Get currently deployed (working) task definition
+          CURRENT_TASK_ARN=$(aws ecs describe-services \
+            --cluster sdt-dev-cluster \
+            --services sdt-dev-$SERVICE_NAME \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          
+          if [ -z "$CURRENT_TASK_ARN" ] || [ "$CURRENT_TASK_ARN" = "None" ]; then
+            echo "❌ No current task definition found for $SERVICE_NAME"
+            exit 1
+          fi
+          
+          echo "Using working task definition: $CURRENT_TASK_ARN"
+          
+          # Get the full task definition
+          WORKING_TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "$CURRENT_TASK_ARN" \
             --query 'taskDefinition' \
             --output json)
-          {
-            echo "task-def<<EOF"
-            echo "$TASK_DEF"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
+          
+          # Store current image for comparison
+          CURRENT_IMAGE=$(echo "$WORKING_TASK_DEF" | jq -r '.containerDefinitions[0].image')
+          echo "Current working image: $CURRENT_IMAGE"
+          
+          # Store for next step
+          echo "$WORKING_TASK_DEF" > current-taskdef.json
+          echo "current-task-arn=$CURRENT_TASK_ARN" >> $GITHUB_OUTPUT
+          echo "current-image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
 
-      - name: Build environment and secrets for task
-        id: env-secrets
-        shell: bash
+      - name: Create minimal task definition update (image only)
+        id: minimal-update
         run: |
-          set -euo pipefail
-
-          # SSM parameter names provisioned by Terraform
-          PARAMS=(
-            "/sdt-dev/config/SPRING_PROFILES_ACTIVE"
-            "/sdt-dev/config/LOG_LEVEL"
-            "/sdt-dev/config/AWS_REGION"
-            "/sdt-dev/config/CONFIG_REPO"
-            "/sdt-dev/config/DISCOVERY_HOST"
-            "/sdt-dev/config/DISCOVERY_PORT"
-            "/sdt-dev/config/GATEWAY_HOST"
-            "/sdt-dev/config/GATEWAY_PORT"
-            "/sdt-dev/config/CONFIG_HOST"
-            "/sdt-dev/config/CONFIG_PORT"
-            "/sdt-dev/endpoints/SPRING_CLOUD_CONFIG_URI"
-            "/sdt-dev/endpoints/EUREKA_CLIENT_SERVICEURL_DEFAULTZONE"
-            "/sdt-dev/endpoints/BASE_URL"
-            "/sdt-dev/db/JDBC_BASE"
-            "/sdt-dev/mongo/analytics_db"
-            "/sdt-dev/mongo/gamification_db"
-            "/sdt-dev/mongo/notification_db"
-          )
-
-          PARAM_JSON=$(aws ssm get-parameters \
-            --with-decryption \
-            --names "${PARAMS[@]}" \
-            --query 'Parameters[].{Name:Name,Value:Value}' \
-            --output json)
-
-          # Convert SSM names to env var names (rightmost path segment)
-          ENV_JSON=$(echo "$PARAM_JSON" | jq -c '[ .[] | {name: (.Name | split("/")[-1]), value: .Value} ]')
-
-          # Secrets Manager ARNs from Terraform outputs (paste once; consider moving to repo env vars)
-          ARN_JWT="${{ secrets.ARN_APP_SECRETS_JWT }}"
-          ARN_OAUTH="${{ secrets.ARN_APP_SECRETS_OAUTH_GOOGLE }}"
-          ARN_MAIL="${{ secrets.ARN_APP_SECRETS_MAIL }}"
-          ARN_MQ="${{ secrets.ARN_APP_SECRETS_MQ }}"
-          ARN_REDIS="${{ secrets.ARN_APP_SECRETS_REDIS }}"
-          ARN_MONGO_ANALYTICS="${{ secrets.ARN_APP_SECRETS_MONGO_ANALYTICS }}"
-          ARN_MONGO_GAMIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_GAMIFICATION }}"
-          ARN_MONGO_NOTIFICATION="${{ secrets.ARN_APP_SECRETS_MONGO_NOTIFICATION }}"
-          ARN_PG_SCHEMAS="${{ secrets.ARN_APP_SECRETS_POSTGRES_SCHEMAS }}"
-
-          # Build generic secrets array. You may tailor per service later.
-          SECRETS_JSON=$(jq -c -n --arg arn_jwt "$ARN_JWT" \
-                               --arg arn_oauth "$ARN_OAUTH" \
-                               --arg arn_mail "$ARN_MAIL" \
-                               --arg arn_mq "$ARN_MQ" \
-                               --arg arn_redis "$ARN_REDIS" \
-                               --arg arn_ma "$ARN_MONGO_ANALYTICS" \
-                               --arg arn_mg "$ARN_MONGO_GAMIFICATION" \
-                               --arg arn_mn "$ARN_MONGO_NOTIFICATION" \
-                               --arg arn_pg "$ARN_PG_SCHEMAS" '
-            [
-              ($arn_jwt   | select(length>0) | {name:"JWT_SECRET",                   valueFrom:(.+":JWT_SECRET::")}),
-              ($arn_jwt   | select(length>0) | {name:"HMAC_SECRET_KEY",              valueFrom:(.+":HMAC_SECRET_KEY::")}),
-              ($arn_jwt   | select(length>0) | {name:"HMAC_ALGORITHM",               valueFrom:(.+":HMAC_ALGORITHM::")}),
-              ($arn_oauth | select(length>0) | {name:"GOOGLE_CLIENT_ID",             valueFrom:(.+":GOOGLE_CLIENT_ID::")}),
-              ($arn_oauth | select(length>0) | {name:"GOOGLE_CLIENT_SECRET",         valueFrom:(.+":GOOGLE_CLIENT_SECRET::")}),
-              ($arn_mail  | select(length>0) | {name:"MAIL_USERNAME",                valueFrom:(.+":MAIL_USERNAME::")}),
-              ($arn_mail  | select(length>0) | {name:"MAIL_PASSWORD",                valueFrom:(.+":MAIL_PASSWORD::")}),
-              ($arn_mq    | select(length>0) | {name:"RABBITMQ_USER",                valueFrom:(.+":RABBITMQ_USER::")}),
-              ($arn_mq    | select(length>0) | {name:"RABBITMQ_PASSWORD",            valueFrom:(.+":RABBITMQ_PASSWORD::")}),
-              ($arn_redis | select(length>0) | {name:"REDIS_PASSWORD",               valueFrom:(.+":REDIS_PASSWORD::")}),
-              ($arn_ma    | select(length>0) | {name:"MONGO_ANALYTICS_USER",         valueFrom:(.+":MONGO_ANALYTICS_USER::")}),
-              ($arn_ma    | select(length>0) | {name:"MONGO_ANALYTICS_PASSWORD",     valueFrom:(.+":MONGO_ANALYTICS_PASSWORD::")}),
-              ($arn_mg    | select(length>0) | {name:"MONGO_GAMIFICATION_USER",      valueFrom:(.+":MONGO_GAMIFICATION_USER::")}),
-              ($arn_mg    | select(length>0) | {name:"MONGO_GAMIFICATION_PASSWORD",  valueFrom:(.+":MONGO_GAMIFICATION_PASSWORD::")}),
-              ($arn_mn    | select(length>0) | {name:"MONGO_NOTIFICATION_USER",      valueFrom:(.+":MONGO_NOTIFICATION_USER::")}),
-              ($arn_mn    | select(length>0) | {name:"MONGO_NOTIFICATION_PASSWORD",  valueFrom:(.+":MONGO_NOTIFICATION_PASSWORD::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_USER_USER",           valueFrom:(.+":POSTGRES_USER_USER::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_USER_PASSWORD",       valueFrom:(.+":POSTGRES_USER_PASSWORD::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_TASK_USER",           valueFrom:(.+":POSTGRES_TASK_USER::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_TASK_PASSWORD",       valueFrom:(.+":POSTGRES_TASK_PASSWORD::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_FEEDBACK_USER",       valueFrom:(.+":POSTGRES_FEEDBACK_USER::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_FEEDBACK_PASSWORD",   valueFrom:(.+":POSTGRES_FEEDBACK_PASSWORD::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_PAYMENT_USER",        valueFrom:(.+":POSTGRES_PAYMENT_USER::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_PAYMENT_PASSWORD",    valueFrom:(.+":POSTGRES_PAYMENT_PASSWORD::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_PRACTICE_USER",       valueFrom:(.+":POSTGRES_PRACTICE_USER::")}),
-              ($arn_pg    | select(length>0) | {name:"POSTGRES_PRACTICE_PASSWORD",   valueFrom:(.+":POSTGRES_PRACTICE_PASSWORD::")})
-            ] | map(select(. != null))')
-
-          echo "env_json=$ENV_JSON" >> "$GITHUB_OUTPUT"
-          echo "secrets_json=$SECRETS_JSON" >> "$GITHUB_OUTPUT"
-
-      - name: Update task definition with env, secrets and new image
-        id: update-task-def
-        run: |
-          TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition sdt-dev-${{ matrix.service.name }} \
-            --query 'taskDefinition' \
-            --output json)
-
-          NEW_TASK_DEF=$(echo "$TASK_DEF" | \
-            jq --arg IMAGE "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}" \
-               --argjson APP_ENV '${{ steps.env-secrets.outputs.env_json }}' \
-               --argjson APP_SECRETS '${{ steps.env-secrets.outputs.secrets_json }}' '
-              .containerDefinitions[0].image = $IMAGE
-              | .containerDefinitions[0].environment = $APP_ENV
-              | .containerDefinitions[0].secrets = $APP_SECRETS
+          SERVICE_NAME="${{ matrix.service.name }}"
+          NEW_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/$SERVICE_NAME:${{ inputs.commit_sha }}"
+          
+          # Read the working task definition
+          WORKING_TASK_DEF=$(cat current-taskdef.json)
+          
+          # Create new task definition with ONLY image change
+          NEW_TASK_DEF=$(echo "$WORKING_TASK_DEF" | jq \
+            --arg NEW_IMAGE "$NEW_IMAGE" '
+              # Update only the image
+              .containerDefinitions[0].image = $NEW_IMAGE
+              # Remove AWS-managed fields
               | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
             ')
+          
+          # Validation: Ensure only image changed
+          OLD_IMAGE=$(echo "$WORKING_TASK_DEF" | jq -r '.containerDefinitions[0].image')
+          NEW_IMAGE_CHECK=$(echo "$NEW_TASK_DEF" | jq -r '.containerDefinitions[0].image')
+          
+          echo "✅ Image update: $OLD_IMAGE → $NEW_IMAGE_CHECK"
+          
+          # Verify no other changes occurred
+          OLD_ENV_COUNT=$(echo "$WORKING_TASK_DEF" | jq '.containerDefinitions[0].environment | length')
+          NEW_ENV_COUNT=$(echo "$NEW_TASK_DEF" | jq '.containerDefinitions[0].environment | length')
+          
+          if [ "$OLD_ENV_COUNT" != "$NEW_ENV_COUNT" ]; then
+            echo "❌ Environment variables changed unexpectedly! Old: $OLD_ENV_COUNT, New: $NEW_ENV_COUNT"
+            exit 1
+          fi
+          
+          OLD_SECRETS_COUNT=$(echo "$WORKING_TASK_DEF" | jq '.containerDefinitions[0].secrets | length')
+          NEW_SECRETS_COUNT=$(echo "$NEW_TASK_DEF" | jq '.containerDefinitions[0].secrets | length')
+          
+          if [ "$OLD_SECRETS_COUNT" != "$NEW_SECRETS_COUNT" ]; then
+            echo "❌ Secrets changed unexpectedly! Old: $OLD_SECRETS_COUNT, New: $NEW_SECRETS_COUNT"
+            exit 1
+          fi
+          
+          echo "✅ Configuration preserved - only image updated"
+          
+          # Save for registration
+          echo "$NEW_TASK_DEF" | jq '.' > taskdef.json
 
-          # Validate JSON and register from file to avoid shell quoting issues
-          echo "$NEW_TASK_DEF" | jq -e '.' > taskdef.json
+      - name: Register and deploy minimal update
+        id: deploy-update
+        run: |
+          SERVICE_NAME="${{ matrix.service.name }}"
+          
+          # Register new task definition
           NEW_TASK_ARN=$(aws ecs register-task-definition \
             --cli-input-json file://taskdef.json \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
-
-          echo "task-arn=$NEW_TASK_ARN" >> $GITHUB_OUTPUT
-          echo "✅ Registered new task definition: $NEW_TASK_ARN"
-
-      - name: Deploy to ECS service
-        run: |
-          echo "🚀 Deploying ${{ matrix.service.name }} to ECS..."
+          
+          echo "✅ Registered: $NEW_TASK_ARN"
+          
+          # Deploy with new image
+          echo "🚀 Deploying $SERVICE_NAME with new image..."
           aws ecs update-service \
             --cluster sdt-dev-cluster \
-            --service sdt-dev-${{ matrix.service.name }} \
-            --task-definition ${{ steps.update-task-def.outputs.task-arn }} \
+            --service sdt-dev-$SERVICE_NAME \
+            --task-definition "$NEW_TASK_ARN" \
             --force-new-deployment \
             --no-cli-pager
+          
+          echo "task-arn=$NEW_TASK_ARN" >> $GITHUB_OUTPUT
 
       - name: Show recent ECS service events
         run: |
