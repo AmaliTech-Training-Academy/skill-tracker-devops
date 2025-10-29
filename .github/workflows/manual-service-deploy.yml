@@ -14,15 +14,15 @@ on:
           - 'config-server'
           - 'discovery-server'
           - 'api-gateway'
-          - 'bff-service'
-          - 'user-service'
-          - 'task-service'
           - 'analytics-service'
-          - 'payment-service'
-          - 'gamification-service'
-          - 'practice-service'
+          - 'bff-service'
           - 'feedback-service'
+          - 'gamification-service'
           - 'notification-service'
+          - 'payment-service'
+          - 'practice-service'
+          - 'task-service'
+          - 'user-service'
       
       environment:
         description: 'Target environment'
@@ -51,6 +51,9 @@ on:
         type: boolean
         default: false
 
+# Note: This workflow uses repository secrets directly
+# No secrets input needed for workflow_dispatch
+
 env:
   AWS_REGION: eu-west-1
   ECR_REGISTRY: 962496666337.dkr.ecr.eu-west-1.amazonaws.com
@@ -75,7 +78,7 @@ jobs:
         run: |
           SERVICE="${{ inputs.service_name }}"
           
-          # Define service mappings
+          # Define service mappings (matching main workflow)
           case "$SERVICE" in
             "config-server")
               echo "service_path=skilltracker-infra/config-server" >> $GITHUB_OUTPUT
@@ -92,49 +95,49 @@ jobs:
               echo "service_port=8080" >> $GITHUB_OUTPUT
               echo "is_infra_service=true" >> $GITHUB_OUTPUT
               ;;
-            "bff-service")
-              echo "service_path=skilltracker-bff" >> $GITHUB_OUTPUT
-              echo "service_port=8083" >> $GITHUB_OUTPUT
-              echo "is_infra_service=false" >> $GITHUB_OUTPUT
-              ;;
-            "user-service")
-              echo "service_path=skilltracker-user-service" >> $GITHUB_OUTPUT
-              echo "service_port=8084" >> $GITHUB_OUTPUT
-              echo "is_infra_service=false" >> $GITHUB_OUTPUT
-              ;;
-            "task-service")
-              echo "service_path=skilltracker-task-service" >> $GITHUB_OUTPUT
-              echo "service_port=8085" >> $GITHUB_OUTPUT
-              echo "is_infra_service=false" >> $GITHUB_OUTPUT
-              ;;
             "analytics-service")
-              echo "service_path=skilltracker-analytics-service" >> $GITHUB_OUTPUT
+              echo "service_path=skilltracker-services/analytics-service" >> $GITHUB_OUTPUT
               echo "service_port=8086" >> $GITHUB_OUTPUT
               echo "is_infra_service=false" >> $GITHUB_OUTPUT
               ;;
-            "payment-service")
-              echo "service_path=skilltracker-payment-service" >> $GITHUB_OUTPUT
-              echo "service_port=8087" >> $GITHUB_OUTPUT
-              echo "is_infra_service=false" >> $GITHUB_OUTPUT
-              ;;
-            "gamification-service")
-              echo "service_path=skilltracker-gamification-service" >> $GITHUB_OUTPUT
-              echo "service_port=8088" >> $GITHUB_OUTPUT
-              echo "is_infra_service=false" >> $GITHUB_OUTPUT
-              ;;
-            "practice-service")
-              echo "service_path=skilltracker-practice-service" >> $GITHUB_OUTPUT
-              echo "service_port=8089" >> $GITHUB_OUTPUT
+            "bff-service")
+              echo "service_path=skilltracker-services/bff-service" >> $GITHUB_OUTPUT
+              echo "service_port=8083" >> $GITHUB_OUTPUT
               echo "is_infra_service=false" >> $GITHUB_OUTPUT
               ;;
             "feedback-service")
-              echo "service_path=skilltracker-feedback-service" >> $GITHUB_OUTPUT
+              echo "service_path=skilltracker-services/feedback-service" >> $GITHUB_OUTPUT
               echo "service_port=8090" >> $GITHUB_OUTPUT
               echo "is_infra_service=false" >> $GITHUB_OUTPUT
               ;;
+            "gamification-service")
+              echo "service_path=skilltracker-services/gamification-service" >> $GITHUB_OUTPUT
+              echo "service_port=8088" >> $GITHUB_OUTPUT
+              echo "is_infra_service=false" >> $GITHUB_OUTPUT
+              ;;
             "notification-service")
-              echo "service_path=skilltracker-notification-service" >> $GITHUB_OUTPUT
+              echo "service_path=skilltracker-services/notification-service" >> $GITHUB_OUTPUT
               echo "service_port=8091" >> $GITHUB_OUTPUT
+              echo "is_infra_service=false" >> $GITHUB_OUTPUT
+              ;;
+            "payment-service")
+              echo "service_path=skilltracker-services/payment-service" >> $GITHUB_OUTPUT
+              echo "service_port=8087" >> $GITHUB_OUTPUT
+              echo "is_infra_service=false" >> $GITHUB_OUTPUT
+              ;;
+            "practice-service")
+              echo "service_path=skilltracker-services/practice-service" >> $GITHUB_OUTPUT
+              echo "service_port=8089" >> $GITHUB_OUTPUT
+              echo "is_infra_service=false" >> $GITHUB_OUTPUT
+              ;;
+            "task-service")
+              echo "service_path=skilltracker-services/task-service" >> $GITHUB_OUTPUT
+              echo "service_port=8085" >> $GITHUB_OUTPUT
+              echo "is_infra_service=false" >> $GITHUB_OUTPUT
+              ;;
+            "user-service")
+              echo "service_path=skilltracker-services/user-service" >> $GITHUB_OUTPUT
+              echo "service_port=8084" >> $GITHUB_OUTPUT
               echo "is_infra_service=false" >> $GITHUB_OUTPUT
               ;;
             *)
@@ -201,6 +204,15 @@ jobs:
             echo "skip_build=false" >> $GITHUB_OUTPUT
           fi
       
+      - name: Debug backend repository structure
+        run: |
+          echo "📁 Checking backend repository structure..."
+          ls -la backend/ || echo "❌ Backend directory not found"
+          find backend/ -maxdepth 2 -type d -name "*task*" || echo "❌ No task-related directories found"
+          find backend/ -maxdepth 2 -type d -name "*service*" || echo "❌ No service directories found"
+          echo "📋 All directories in backend/:"
+          find backend/ -maxdepth 2 -type d | head -20
+      
       - name: Build and push Docker image
         if: inputs.force_rebuild == true || steps.check-image.outputs.skip_build == 'false'
         run: |
@@ -209,6 +221,15 @@ jobs:
           IMAGE_TAG="${{ needs.validate-inputs.outputs.image_tag }}"
           
           echo "🔨 Building $SERVICE_NAME from $SERVICE_PATH"
+          echo "📁 Looking for: backend/$SERVICE_PATH"
+          
+          # Check if the path exists
+          if [ ! -d "backend/$SERVICE_PATH" ]; then
+            echo "❌ Directory backend/$SERVICE_PATH does not exist"
+            echo "📋 Available directories:"
+            find backend/ -maxdepth 2 -type d | grep -E "(task|service)" || echo "No matching directories found"
+            exit 1
+          fi
           
           cd backend/$SERVICE_PATH
           
