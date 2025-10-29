@@ -6,7 +6,7 @@ name: Feature to Dev CI/CD
 # 2. Updates ONLY the container image tag (preserves all other config)
 # 3. Validates no other changes occurred
 # 4. Deploys the minimal update
-# 
+#
 # Benefits:
 # - Preserves all Terraform-managed configuration
 # - Eliminates configuration drift risks
@@ -430,31 +430,31 @@ jobs:
         id: get-working-taskdef
         run: |
           SERVICE_NAME="${{ matrix.service.name }}"
-          
+
           # Get currently deployed (working) task definition
           CURRENT_TASK_ARN=$(aws ecs describe-services \
             --cluster sdt-dev-cluster \
             --services sdt-dev-$SERVICE_NAME \
             --query 'services[0].taskDefinition' \
             --output text)
-          
+
           if [ -z "$CURRENT_TASK_ARN" ] || [ "$CURRENT_TASK_ARN" = "None" ]; then
             echo "❌ No current task definition found for $SERVICE_NAME"
             exit 1
           fi
-          
+
           echo "Using working task definition: $CURRENT_TASK_ARN"
-          
+
           # Get the full task definition
           WORKING_TASK_DEF=$(aws ecs describe-task-definition \
             --task-definition "$CURRENT_TASK_ARN" \
             --query 'taskDefinition' \
             --output json)
-          
+
           # Store current image for comparison
           CURRENT_IMAGE=$(echo "$WORKING_TASK_DEF" | jq -r '.containerDefinitions[0].image')
           echo "Current working image: $CURRENT_IMAGE"
-          
+
           # Store for next step
           echo "$WORKING_TASK_DEF" > current-taskdef.json
           echo "current-task-arn=$CURRENT_TASK_ARN" >> $GITHUB_OUTPUT
@@ -465,10 +465,10 @@ jobs:
         run: |
           SERVICE_NAME="${{ matrix.service.name }}"
           NEW_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/$SERVICE_NAME:${{ inputs.commit_sha }}"
-          
+
           # Read the working task definition
           WORKING_TASK_DEF=$(cat current-taskdef.json)
-          
+
           # Create new task definition with ONLY image change
           NEW_TASK_DEF=$(echo "$WORKING_TASK_DEF" | jq \
             --arg NEW_IMAGE "$NEW_IMAGE" '
@@ -477,32 +477,32 @@ jobs:
               # Remove AWS-managed fields
               | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
             ')
-          
+
           # Validation: Ensure only image changed
           OLD_IMAGE=$(echo "$WORKING_TASK_DEF" | jq -r '.containerDefinitions[0].image')
           NEW_IMAGE_CHECK=$(echo "$NEW_TASK_DEF" | jq -r '.containerDefinitions[0].image')
-          
+
           echo "✅ Image update: $OLD_IMAGE → $NEW_IMAGE_CHECK"
-          
+
           # Verify no other changes occurred
           OLD_ENV_COUNT=$(echo "$WORKING_TASK_DEF" | jq '.containerDefinitions[0].environment | length')
           NEW_ENV_COUNT=$(echo "$NEW_TASK_DEF" | jq '.containerDefinitions[0].environment | length')
-          
+
           if [ "$OLD_ENV_COUNT" != "$NEW_ENV_COUNT" ]; then
             echo "❌ Environment variables changed unexpectedly! Old: $OLD_ENV_COUNT, New: $NEW_ENV_COUNT"
             exit 1
           fi
-          
+
           OLD_SECRETS_COUNT=$(echo "$WORKING_TASK_DEF" | jq '.containerDefinitions[0].secrets | length')
           NEW_SECRETS_COUNT=$(echo "$NEW_TASK_DEF" | jq '.containerDefinitions[0].secrets | length')
-          
+
           if [ "$OLD_SECRETS_COUNT" != "$NEW_SECRETS_COUNT" ]; then
             echo "❌ Secrets changed unexpectedly! Old: $OLD_SECRETS_COUNT, New: $NEW_SECRETS_COUNT"
             exit 1
           fi
-          
+
           echo "✅ Configuration preserved - only image updated"
-          
+
           # Save for registration
           echo "$NEW_TASK_DEF" | jq '.' > taskdef.json
 
@@ -510,15 +510,15 @@ jobs:
         id: deploy-update
         run: |
           SERVICE_NAME="${{ matrix.service.name }}"
-          
+
           # Register new task definition
           NEW_TASK_ARN=$(aws ecs register-task-definition \
             --cli-input-json file://taskdef.json \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
-          
+
           echo "✅ Registered: $NEW_TASK_ARN"
-          
+
           # Deploy with new image
           echo "🚀 Deploying $SERVICE_NAME with new image..."
           aws ecs update-service \
@@ -527,7 +527,7 @@ jobs:
             --task-definition "$NEW_TASK_ARN" \
             --force-new-deployment \
             --no-cli-pager
-          
+
           echo "task-arn=$NEW_TASK_ARN" >> $GITHUB_OUTPUT
 
       - name: Show recent ECS service events
@@ -591,15 +591,7 @@ jobs:
             "config-server"
             "discovery-server"
             "api-gateway"
-            "bff-service"
             "user-service"
-            "task-service"
-            "analytics-service"
-            "payment-service"
-            "gamification-service"
-            "practice-service"
-            "feedback-service"
-            "notification-service"
           )
 
           ALL_HEALTHY=true
@@ -639,54 +631,294 @@ jobs:
           echo "alb-dns=$ALB_DNS" >> $GITHUB_OUTPUT
           echo "📍 ALB Endpoint: http://$ALB_DNS"
 
-  notify-slack:
-    name: Notify Slack
+  # Stage-specific failure notifications
+  notify-build-failure:
+    name: Notify Build Failure
     runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-infra, deploy-business, health-check]
-    if: always()
+    needs: [build-and-push, detect-changes]
+    if: failure() && needs.build-and-push.result == 'failure'
 
     steps:
-      - name: Checkout repository (required for local actions)
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Determine status
-        id: status
-        run: |
-          if [ "${{ needs.health-check.result }}" == "success" ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "emoji=:white_check_mark:" >> $GITHUB_OUTPUT
-            echo "color=good" >> $GITHUB_OUTPUT
-          elif [ "${{ needs.build-and-push.result }}" == "failure" ]; then
-            echo "status=failed" >> $GITHUB_OUTPUT
-            echo "emoji=:x:" >> $GITHUB_OUTPUT
-            echo "color=danger" >> $GITHUB_OUTPUT
-          else
-            echo "status=partial" >> $GITHUB_OUTPUT
-            echo "emoji=:warning:" >> $GITHUB_OUTPUT
-            echo "color=warning" >> $GITHUB_OUTPUT
-          fi
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Send Slack notification
+      - name: Get build failure details
+        id: build-details
+        run: |
+          # Get failed services from the matrix
+          CHANGED_SERVICES='${{ needs.detect-changes.outputs.services_json }}'
+          FAILED_SERVICES=""
+
+          # Check which services were supposed to be built
+          for service in $(echo "$CHANGED_SERVICES" | jq -r '.[]'); do
+            FAILED_SERVICES="$FAILED_SERVICES\n• $service"
+          done
+
+          echo "failed-services<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_SERVICES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Send build failure notification
         uses: ./.github/actions/slack-notify
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": "${{ steps.status.outputs.emoji }} Backend Deployment to Dev",
+              "text": ":x: Build Failed - Backend Deployment to Dev",
               "attachments": [
                 {
-                  "color": "${{ steps.status.outputs.color }}",
+                  "color": "danger",
                   "fields": [
-                    { "title": "Status", "value": "${{ steps.status.outputs.status }}", "short": true },
+                    { "title": "❌ Failure Stage", "value": "Build & Push", "short": true },
                     { "title": "Environment", "value": "Dev", "short": true },
                     { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
                     { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
                     { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
-                    { "title": "Build Result", "value": "${{ needs.build-and-push.result }}", "short": true },
-                    { "title": "Deploy Results", "value": "infra: ${{ needs.deploy-infra.result }}, business: ${{ needs.deploy-business.result }}", "short": true },
-                    { "title": "Health Check", "value": "${{ needs.health-check.result }}", "short": true }
+                    { "title": "Failed Services", "value": "${{ steps.build-details.outputs.failed-services }}", "short": false },
+                    { "title": "Action Required", "value": "Check build logs for compilation errors, dependency issues, or Docker build failures", "short": false },
+                    { "title": "View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
                   ],
-                  "footer": "GitHub Actions",
+                  "footer": "GitHub Actions - Build Failure",
+                  "footer_icon": "https://github.githubassets.com/favicon.ico"
+                }
+              ]
+            }
+
+  notify-deploy-failure:
+    name: Notify Deployment Failure
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-infra, deploy-business, detect-changes]
+    if: failure() && (needs.deploy-infra.result == 'failure' || needs.deploy-business.result == 'failure')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get deployment failure details
+        id: deploy-details
+        run: |
+          FAILURE_STAGE=""
+          FAILED_SERVICES=""
+          TROUBLESHOOTING=""
+
+          if [ "${{ needs.deploy-infra.result }}" == "failure" ]; then
+            FAILURE_STAGE="Infrastructure Deployment"
+            FAILED_SERVICES="• config-server\n• discovery-server\n• api-gateway"
+            TROUBLESHOOTING="Check ECS service events, task definition registration, and service dependencies"
+          elif [ "${{ needs.deploy-business.result }}" == "failure" ]; then
+            FAILURE_STAGE="Business Services Deployment"
+            CHANGED_SERVICES='${{ needs.detect-changes.outputs.business_services_json }}'
+            for service in $(echo "$CHANGED_SERVICES" | jq -r '.[].name'); do
+              FAILED_SERVICES="$FAILED_SERVICES\n• $service"
+            done
+            TROUBLESHOOTING="Check ECS service stability, task health checks, and service startup logs"
+          fi
+
+          echo "failure-stage=$FAILURE_STAGE" >> $GITHUB_OUTPUT
+          echo "failed-services<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_SERVICES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "troubleshooting=$TROUBLESHOOTING" >> $GITHUB_OUTPUT
+
+      - name: Get ECS service status
+        id: ecs-status
+        run: |
+          SERVICES=("config-server" "discovery-server" "api-gateway" "user-service")
+          SERVICE_STATUS=""
+
+          for service in "${SERVICES[@]}"; do
+            STATUS=$(aws ecs describe-services \
+              --cluster sdt-dev-cluster \
+              --services sdt-dev-$service \
+              --query 'services[0].{running:runningCount,desired:desiredCount,status:status}' \
+              --output json 2>/dev/null || echo '{"running":0,"desired":0,"status":"NOT_FOUND"}')
+            
+            RUNNING=$(echo "$STATUS" | jq -r '.running // 0')
+            DESIRED=$(echo "$STATUS" | jq -r '.desired // 0')
+            SVC_STATUS=$(echo "$STATUS" | jq -r '.status // "UNKNOWN"')
+            
+            if [ "$RUNNING" == "$DESIRED" ] && [ "$DESIRED" != "0" ]; then
+              SERVICE_STATUS="$SERVICE_STATUS\n✅ $service: $RUNNING/$DESIRED ($SVC_STATUS)"
+            else
+              SERVICE_STATUS="$SERVICE_STATUS\n❌ $service: $RUNNING/$DESIRED ($SVC_STATUS)"
+            fi
+          done
+
+          echo "service-status<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$SERVICE_STATUS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Send deployment failure notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": ":warning: Deployment Failed - Backend Deployment to Dev",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    { "title": "❌ Failure Stage", "value": "${{ steps.deploy-details.outputs.failure-stage }}", "short": true },
+                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
+                    { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
+                    { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
+                    { "title": "Failed Services", "value": "${{ steps.deploy-details.outputs.failed-services }}", "short": false },
+                    { "title": "Current Service Status", "value": "${{ steps.ecs-status.outputs.service-status }}", "short": false },
+                    { "title": "Troubleshooting", "value": "${{ steps.deploy-details.outputs.troubleshooting }}", "short": false },
+                    { "title": "View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
+                  ],
+                  "footer": "GitHub Actions - Deployment Failure",
+                  "footer_icon": "https://github.githubassets.com/favicon.ico"
+                }
+              ]
+            }
+
+  notify-health-failure:
+    name: Notify Health Check Failure
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-infra, deploy-business, health-check]
+    if: failure() && needs.health-check.result == 'failure'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get detailed health check status
+        id: health-details
+        run: |
+          SERVICES=(
+            "config-server"
+            "discovery-server"
+            "api-gateway"
+            "user-service"
+          )
+
+          UNHEALTHY_SERVICES=""
+          HEALTHY_SERVICES=""
+          RECENT_EVENTS=""
+
+          for service in "${SERVICES[@]}"; do
+            # Get service status
+            SERVICE_INFO=$(aws ecs describe-services \
+              --cluster sdt-dev-cluster \
+              --services sdt-dev-$service \
+              --query 'services[0]' \
+              --output json 2>/dev/null || echo '{}')
+            
+            RUNNING=$(echo "$SERVICE_INFO" | jq -r '.runningCount // 0')
+            DESIRED=$(echo "$SERVICE_INFO" | jq -r '.desiredCount // 0')
+            
+            if [ "$RUNNING" == "$DESIRED" ] && [ "$DESIRED" != "0" ]; then
+              HEALTHY_SERVICES="$HEALTHY_SERVICES\n✅ $service: $RUNNING/$DESIRED tasks"
+            else
+              UNHEALTHY_SERVICES="$UNHEALTHY_SERVICES\n❌ $service: $RUNNING/$DESIRED tasks"
+              
+              # Get recent events for unhealthy services
+              EVENTS=$(aws ecs describe-services \
+                --cluster sdt-dev-cluster \
+                --services sdt-dev-$service \
+                --query 'services[0].events[0:3].[createdAt,message]' \
+                --output text 2>/dev/null | head -3)
+              
+              RECENT_EVENTS="$RECENT_EVENTS\n\n**$service events:**\n$EVENTS"
+            fi
+          done
+
+          echo "unhealthy-services<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$UNHEALTHY_SERVICES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "healthy-services<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$HEALTHY_SERVICES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "recent-events<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$RECENT_EVENTS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Send health check failure notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": ":rotating_light: Health Check Failed - Backend Deployment to Dev",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    { "title": "❌ Failure Stage", "value": "Health Check", "short": true },
+                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
+                    { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
+                    { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
+                    { "title": "❌ Unhealthy Services", "value": "${{ steps.health-details.outputs.unhealthy-services }}", "short": false },
+                    { "title": "✅ Healthy Services", "value": "${{ steps.health-details.outputs.healthy-services }}", "short": false },
+                    { "title": "Recent Events", "value": "${{ steps.health-details.outputs.recent-events }}", "short": false },
+                    { "title": "Action Required", "value": "Automatic rollback initiated. Check ECS task logs and service events.", "short": false },
+                    { "title": "View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
+                  ],
+                  "footer": "GitHub Actions - Health Check Failure",
+                  "footer_icon": "https://github.githubassets.com/favicon.ico"
+                }
+              ]
+            }
+
+  notify-slack:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-infra, deploy-business, health-check]
+    if: success()
+
+    steps:
+      - name: Checkout repository (required for local actions)
+        uses: actions/checkout@v4
+
+      - name: Send success notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": ":white_check_mark: Deployment Successful - Backend to Dev",
+              "attachments": [
+                {
+                  "color": "good",
+                  "fields": [
+                    { "title": "✅ Status", "value": "All stages completed successfully", "short": true },
+                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
+                    { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
+                    { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
+                    { "title": "Build Result", "value": "✅ ${{ needs.build-and-push.result }}", "short": true },
+                    { "title": "Deploy Results", "value": "✅ infra: ${{ needs.deploy-infra.result }}, business: ${{ needs.deploy-business.result }}", "short": true },
+                    { "title": "Health Check", "value": "✅ ${{ needs.health-check.result }}", "short": true },
+                    { "title": "View Details", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
+                  ],
+                  "footer": "GitHub Actions - Deployment Success",
                   "footer_icon": "https://github.githubassets.com/favicon.ico"
                 }
               ]
@@ -832,3 +1064,31 @@ jobs:
             aws ecs wait services-stable --cluster sdt-dev-cluster --services sdt-dev-$name
             echo "✅ Rolled back $name to $PREV"
           done
+
+      - name: Send rollback notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": ":arrows_counterclockwise: Automatic Rollback Completed - Backend Deployment to Dev",
+              "attachments": [
+                {
+                  "color": "warning",
+                  "fields": [
+                    { "title": "🔄 Action Taken", "value": "Automatic Rollback", "short": true },
+                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
+                    { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
+                    { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
+                    { "title": "Reason", "value": "Health check failed after deployment", "short": false },
+                    { "title": "Services Rolled Back", "value": "All changed services reverted to previous working versions", "short": false },
+                    { "title": "Status", "value": "✅ System restored to stable state", "short": false },
+                    { "title": "Next Steps", "value": "Review deployment logs, fix issues, and retry deployment", "short": false },
+                    { "title": "View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
+                  ],
+                  "footer": "GitHub Actions - Automatic Rollback",
+                  "footer_icon": "https://github.githubassets.com/favicon.ico"
+                }
+              ]
+            }
