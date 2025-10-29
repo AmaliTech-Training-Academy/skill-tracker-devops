@@ -410,8 +410,8 @@ jobs:
   deploy-business:
     name: Deploy Business Services (Image-Only Updates)
     runs-on: ubuntu-latest
-    needs: [deploy-infra, detect-changes]
-    if: inputs.enable_ecs_deploy
+    needs: [build-and-push, deploy-infra, detect-changes]
+    if: inputs.enable_ecs_deploy && always() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
 
     strategy:
       matrix:
@@ -573,8 +573,8 @@ jobs:
   health-check:
     name: Health Check Services
     runs-on: ubuntu-latest
-    needs: deploy-business
-    if: inputs.enable_ecs_deploy
+    needs: [deploy-infra, deploy-business]
+    if: inputs.enable_ecs_deploy && always() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped') && (needs.deploy-business.result == 'success' || needs.deploy-business.result == 'skipped')
 
     steps:
       - name: Configure AWS credentials
@@ -891,7 +891,7 @@ jobs:
     name: Notify Success
     runs-on: ubuntu-latest
     needs: [build-and-push, deploy-infra, deploy-business, health-check]
-    if: success()
+    if: always() && needs.build-and-push.result == 'success' && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped') && (needs.deploy-business.result == 'success' || needs.deploy-business.result == 'skipped') && needs.health-check.result == 'success'
 
     steps:
       - name: Checkout repository (required for local actions)
@@ -928,6 +928,7 @@ jobs:
     name: Deployment Summary
     runs-on: ubuntu-latest
     needs: [build-and-push, deploy-infra, deploy-business, health-check]
+    if: always()
 
     steps:
       - name: Generate summary
