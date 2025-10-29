@@ -223,12 +223,124 @@ resource "aws_ecs_task_definition" "user_service" {
           value = "dev"
         },
         {
-          name  = "SPRING_SQL_INIT_MODE"
-          value = "never"
+          name  = "EUREKA_INSTANCE_PREFER_IP_ADDRESS"
+          value = "false"
+        },
+        {
+          name  = "EUREKA_INSTANCE_HOSTNAME"
+          value = "user-service.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "POSTGRES_HOST"
+          value = split(":", var.rds_endpoint)[0]
+        },
+        {
+          name  = "POSTGRES_DB"
+          value = var.rds_db_name
+        },
+        {
+          name  = "SPRING_JPA_HIBERNATE_DDL_AUTO"
+          value = "update"
+        },
+        {
+          name  = "SPRING_DATA_REDIS_HOST"
+          value = "redis.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "SPRING_DATA_REDIS_PORT"
+          value = "6379"
+        },
+        {
+          name  = "COOKIE_DOMAIN"
+          value = "localhost"
+        },
+        {
+          name  = "COOKIE_SECURE"
+          value = "false"
+        },
+        {
+          name  = "BASE_URL"
+          value = "https://lmmqcw9520.execute-api.eu-west-1.amazonaws.com/dev"
+        },
+        {
+          name  = "FRONTEND_URL"
+          value = "https://dev.dy006p1vkpl2e.amplifyapp.com"
+        },
+        {
+          name  = "GOOGLE_CLIENT_ID"
+          value = "71818883519-qruu2n5l2qtb75t2s50gbulj5qj5uuap.apps.googleusercontent.com"
+        },
+        {
+          name  = "GOOGLE_CLIENT_SECRET"
+          value = "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"
+        },
+        {
+          name  = "GOOGLE_REDIRECT_URI"
+          value = "https://lmmqcw9520.execute-api.eu-west-1.amazonaws.com/dev/login/oauth2/code/google"
+        },
+        {
+          name  = "GOOGLE_AUTHORIZATION_URI"
+          value = "https://accounts.google.com/o/oauth2/v2/auth"
+        },
+        {
+          name  = "GOOGLE_TOKEN_URI"
+          value = "https://www.googleapis.com/oauth2/v4/token"
+        },
+        {
+          name  = "GOOGLE_USER_INFO_URI"
+          value = "https://www.googleapis.com/oauth2/v3/userinfo"
+        },
+        {
+          name  = "GITHUB_CLIENT_ID"
+          value = "github-client-id"
+        },
+        {
+          name  = "GITHUB_CLIENT_SECRET"
+          value = "github-client-secret"
+        },
+        {
+          name  = "GITHUB_AUTHORIZATION_URI"
+          value = "https://github.com/login/oauth/authorize"
+        },
+        {
+          name  = "GITHUB_TOKEN_URI"
+          value = "https://github.com/login/oauth/access_token"
+        },
+        {
+          name  = "GITHUB_USER_INFO_URI"
+          value = "https://api.github.com/user"
+        },
+        {
+          name  = "GITHUB_USER_NAME_ATTRIBUTE"
+          value = "login"
+        },
+        {
+          name  = "GITHUB_REDIRECT_URI"
+          value = "https://lmmqcw9520.execute-api.eu-west-1.amazonaws.com/dev/login/oauth2/code/github"
+        },
+        {
+          name  = "GITHUB_CLIENT_AUTHENTICATION_METHOD"
+          value = "client_secret_post"
         }
       ]
 
       secrets = [
+        {
+          name      = "POSTGRES_USER"
+          valueFrom = "${var.rds_secret_arn}:username::"
+        },
+        {
+          name      = "POSTGRES_PASSWORD"
+          valueFrom = "${var.rds_secret_arn}:password::"
+        },
+        {
+          name      = "SENDGRID_API_KEY"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-sendgrid-credentials-gvRTix:api_key::"
+        },
+        {
+          name      = "MAIL_USERNAME"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-sendgrid-credentials-gvRTix:from_email::"
+        },
         {
           name      = "JWT_SECRET"
           valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:JWT_SECRET::"

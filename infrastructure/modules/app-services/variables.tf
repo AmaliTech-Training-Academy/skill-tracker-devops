@@ -69,6 +69,24 @@ variable "config_repo" {
   default     = "AmaliTech-Training-Academy/skill-tracker-configs"
 }
 
+variable "rds_endpoint" {
+  description = "RDS endpoint"
+  type        = string
+  default     = ""
+}
+
+variable "rds_db_name" {
+  description = "RDS database name"
+  type        = string
+  default     = ""
+}
+
+variable "rds_secret_arn" {
+  description = "RDS credentials secret ARN"
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
