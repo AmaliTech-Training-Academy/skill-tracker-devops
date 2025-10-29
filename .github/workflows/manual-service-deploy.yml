@@ -164,12 +164,28 @@ jobs:
     needs: validate-inputs
     
     steps:
+      - name: Debug repository info
+        run: |
+          echo "🔍 Repository being checked out: ${{ secrets.BACKEND_REPO_NAME }}"
+          echo "🏷️ Image tag to use: ${{ needs.validate-inputs.outputs.image_tag }}"
+      
       - name: Checkout backend repository
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.BACKEND_REPO_NAME }}
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           fetch-depth: 0
+      
+      - name: Verify checkout and show structure
+        run: |
+          echo "📁 Current working directory:"
+          pwd
+          echo "📋 Repository info:"
+          git remote -v || echo "No git remotes found"
+          echo "📂 Root directory contents:"
+          ls -la
+          echo "📂 Looking for skilltracker directories:"
+          find . -maxdepth 1 -type d -name "skilltracker*" || echo "No skilltracker directories found"
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
