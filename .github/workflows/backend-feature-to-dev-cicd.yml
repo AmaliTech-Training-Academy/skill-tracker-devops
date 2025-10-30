@@ -124,10 +124,10 @@ jobs:
                 *) BUSINESS_JSON=$(jq -c --argjson o "$obj" '. + [$o]' <<<"$BUSINESS_JSON");;
               esac
             done
-            echo "services_json=$SERVICES_JSON" >> "$GITHUB_OUTPUT"
-            echo "business_services_json=$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
-            echo "infra_any=true" >> "$GITHUB_OUTPUT"
-            echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
+            printf 'services_json=%s\n' "$SERVICES_JSON" >> "$GITHUB_OUTPUT"
+            printf 'business_services_json=%s\n' "$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
+            printf 'infra_any=%s\n' "true" >> "$GITHUB_OUTPUT"
+            printf 'infra_csv=%s\n' "$INFRA_CSV" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -165,10 +165,11 @@ jobs:
           INFRA_ANY=false
           if [ -n "$INFRA_CSV" ]; then INFRA_ANY=true; fi
 
-          echo "services_json=$SERVICES_JSON" >> "$GITHUB_OUTPUT"
-          echo "business_services_json=$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
-          echo "infra_any=$INFRA_ANY" >> "$GITHUB_OUTPUT"
-          echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
+          # Use printf to avoid shell interpretation issues
+          printf 'services_json=%s\n' "$SERVICES_JSON" >> "$GITHUB_OUTPUT"
+          printf 'business_services_json=%s\n' "$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
+          printf 'infra_any=%s\n' "$INFRA_ANY" >> "$GITHUB_OUTPUT"
+          printf 'infra_csv=%s\n' "$INFRA_CSV" >> "$GITHUB_OUTPUT"
 
       - name: Debug changed services outputs
         run: |
