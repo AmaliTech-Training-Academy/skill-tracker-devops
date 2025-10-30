@@ -399,3 +399,19 @@ graph TD
     O --> N
     N --> P[End]
 ```
+
+### deployment flow
+
+```mermaid
+graph TD
+    A[Get Current Working Task Definition] --> B[Extract Current Image Tag]
+    B --> C[Update Image Tag Only]
+    C --> D[Validate No Other Changes]
+    D --> E[Register New Task Definition]
+    E --> F[Deploy Updated Service]
+    F --> G[Wait for Stability]
+    G --> H[Success!]
+
+    D --> I[Validation Failed?]
+    I --> J[Exit with Error]
+```
