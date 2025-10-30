@@ -22,11 +22,51 @@ runs:
       run: |
         echo "SLACK_WEBHOOK_URL not provided; skipping Slack notification."
 
+    - name: Ensure jq is installed
+      if: ${{ inputs.webhook != '' }}
+      shell: bash
+      run: |
+        if ! command -v jq &> /dev/null; then
+          echo "📦 Installing jq..."
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+        else
+          echo "✅ jq is already installed"
+        fi
+
     - name: Send Slack notification
       if: ${{ inputs.webhook != '' }}
-      uses: slackapi/slack-github-action@v1.26.0
-      with:
-        payload: ${{ inputs.payload }}
-      env:
-        SLACK_WEBHOOK_URL: ${{ inputs.webhook }}
-        SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+      shell: bash
+      run: |
+        # Escape payload for safe shell usage with heredoc
+        PAYLOAD=$(cat <<'EOF'
+        ${{ inputs.payload }}
+        EOF
+        )
+        
+        # Validate JSON before sending
+        if ! echo "$PAYLOAD" | jq empty 2>/dev/null; then
+          echo "❌ Invalid JSON payload"
+          exit 1
+        fi
+        
+        echo "📤 Sending Slack notification..."
+        
+        # Send with error handling and capture HTTP status
+        RESPONSE=$(curl -X POST "${{ inputs.webhook }}" \
+          -H 'Content-Type: application/json' \
+          -d "$PAYLOAD" \
+          -w "\n%{http_code}" \
+          -s)
+        
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        BODY=$(echo "$RESPONSE" | head -n -1)
+        
+        # Check HTTP response code
+        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+          echo "✅ Slack notification sent successfully (HTTP $HTTP_CODE)"
+        else
+          echo "❌ Slack notification failed (HTTP $HTTP_CODE)"
+          echo "Response: $BODY"
+          exit 1
+        fi
