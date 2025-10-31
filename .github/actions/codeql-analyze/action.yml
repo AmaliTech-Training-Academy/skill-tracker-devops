@@ -30,6 +30,10 @@ inputs:
     description: "Java version to use for analysis"
     required: false
     default: "21"
+  branch:
+    description: "Branch name for results upload (e.g., main, develop)"
+    required: false
+    default: "main"
 
 runs:
   using: "composite"
@@ -62,3 +66,14 @@ runs:
       uses: github/codeql-action/analyze@v3
       with:
         category: ${{ inputs.category }}
+        upload: false
+        output: ${{ runner.temp }}/codeql-results
+    
+    - name: Upload SARIF to backend repository
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ runner.temp }}/codeql-results/${{ inputs.language }}.sarif
+        repository: ${{ inputs.repository }}
+        ref: refs/heads/${{ inputs.branch }}
+        sha: ${{ inputs.ref }}
+        token: ${{ inputs.token }}
