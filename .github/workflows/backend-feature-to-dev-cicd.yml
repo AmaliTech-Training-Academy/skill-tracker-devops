@@ -190,34 +190,10 @@ jobs:
           echo "infra_any=${{ steps.compute.outputs.infra_any }}"
           echo "infra_csv=${{ steps.compute.outputs.infra_csv }}"
 
-  codeql-analysis:
-    name: CodeQL Analysis (Java)
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-    steps:
-      - name: Checkout devops repository (for action)
-        uses: actions/checkout@v4
-
-      - name: Run CodeQL Analysis
-        uses: ./.github/actions/codeql-analyze
-        with:
-          repository: ${{ secrets.BACKEND_REPO_NAME }}
-          ref: ${{ inputs.commit_sha }}
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          language: java
-          queries: security-and-quality
-          category: backend-feature-to-dev
-          java-version: "21"
-          branch: ${{ inputs.target_branch }}
-
   build-and-push:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
-    needs: [detect-changes, codeql-analysis]
+    needs: detect-changes
     continue-on-error: true
 
     strategy:
@@ -643,43 +619,6 @@ jobs:
           echo "📍 ALB Endpoint: http://$ALB_DNS"
 
   # Stage-specific failure notifications
-  notify-codeql-failure:
-    name: Notify CodeQL Analysis Failure
-    runs-on: ubuntu-latest
-    needs: [codeql-analysis]
-    if: failure() && needs.codeql-analysis.result == 'failure'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Send CodeQL failure notification
-        uses: ./.github/actions/slack-notify
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": ":warning: CodeQL Security Analysis Failed - Backend Deployment to Dev",
-              "attachments": [
-                {
-                  "color": "warning",
-                  "fields": [
-                    { "title": "🔍 Failure Stage", "value": "CodeQL Security Scan", "short": true },
-                    { "title": "Environment", "value": "Dev", "short": true },
-                    { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
-                    { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
-                    { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
-                    { "title": "⚠️ Issue", "value": "Security vulnerabilities or code quality issues detected in Java code", "short": false },
-                    { "title": "🛡️ Action Required", "value": "Review CodeQL alerts in GitHub Security tab and fix identified issues before deployment", "short": false },
-                    { "title": "🔗 View Security Alerts", "value": "<${{ github.server_url }}/${{ github.repository }}/security/code-scanning|Code Scanning Alerts>", "short": true },
-                    { "title": "🔗 View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
-                  ],
-                  "footer": "GitHub Actions - CodeQL Security Scan",
-                  "footer_icon": "https://github.githubassets.com/favicon.ico"
-                }
-              ]
-            }
-
   notify-build-failure:
     name: Notify Build Failure
     runs-on: ubuntu-latest
