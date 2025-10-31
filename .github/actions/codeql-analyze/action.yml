@@ -94,15 +94,14 @@ runs:
         # Encode SARIF file to base64 and save to file
         cat "$SARIF_FILE" | gzip | base64 -w 0 > /tmp/sarif_base64.txt
 
-        # Create JSON payload file
-        cat > /tmp/payload.json <<EOF
-{
-  "commit_sha": "${{ inputs.ref }}",
-  "ref": "refs/heads/${{ inputs.branch }}",
-  "sarif": "$(cat /tmp/sarif_base64.txt)",
-  "tool_name": "CodeQL"
-}
-EOF
+        # Create JSON payload using jq to properly escape everything
+        jq -n \
+          --arg commit_sha "${{ inputs.ref }}" \
+          --arg ref "refs/heads/${{ inputs.branch }}" \
+          --arg sarif "$(cat /tmp/sarif_base64.txt)" \
+          --arg tool "CodeQL" \
+          '{commit_sha: $commit_sha, ref: $ref, sarif: $sarif, tool_name: $tool}' \
+          > /tmp/payload.json
 
         # Upload using GitHub API with payload from file
         RESPONSE=$(curl -X POST \
