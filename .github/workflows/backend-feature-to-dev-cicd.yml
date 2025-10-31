@@ -212,6 +212,7 @@ jobs:
           queries: security-and-quality
           category: backend-feature-to-dev
           java-version: "21"
+          branch: ${{ inputs.target_branch }}
 
   build-and-push:
     name: Build and Push Docker Images
