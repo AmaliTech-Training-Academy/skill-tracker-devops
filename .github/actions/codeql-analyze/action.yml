@@ -92,18 +92,29 @@ runs:
         fi
 
         # Encode SARIF file to base64 and save to file
+        echo "🔄 Encoding SARIF file..."
         cat "$SARIF_FILE" | gzip | base64 -w 0 > /tmp/sarif_base64.txt
 
-        # Create JSON payload using jq to properly escape everything
-        jq -n \
-          --arg commit_sha "${{ inputs.ref }}" \
-          --arg ref "refs/heads/${{ inputs.branch }}" \
-          --arg sarif "$(cat /tmp/sarif_base64.txt)" \
-          --arg tool "CodeQL" \
-          '{commit_sha: $commit_sha, ref: $ref, sarif: $sarif, tool_name: $tool}' \
-          > /tmp/payload.json
+        # Create JSON payload using Python (reads from file, no arg limits)
+        python3 << 'PYTHON_EOF' > /tmp/payload.json
+import json
+
+# Read base64 SARIF from file
+with open('/tmp/sarif_base64.txt', 'r') as f:
+    sarif_base64 = f.read().strip()
+
+payload = {
+    "commit_sha": "${{ inputs.ref }}",
+    "ref": "refs/heads/${{ inputs.branch }}",
+    "sarif": sarif_base64,
+    "tool_name": "CodeQL"
+}
+
+print(json.dumps(payload))
+PYTHON_EOF
 
         # Upload using GitHub API with payload from file
+        echo "📤 Uploading to GitHub..."
         RESPONSE=$(curl -X POST \
           -H "Accept: application/vnd.github+json" \
           -H "Authorization: Bearer $GITHUB_TOKEN" \
