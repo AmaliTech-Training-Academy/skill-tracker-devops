@@ -1,0 +1,79 @@
+name: CodeQL Security Analysis
+
+description: "Run CodeQL security analysis on Java codebase"
+
+author: "Skill Tracker DevOps"
+
+inputs:
+  repository:
+    description: "Repository to checkout (e.g., owner/repo)"
+    required: true
+  ref:
+    description: "Git ref to checkout (commit SHA, branch, or tag)"
+    required: true
+  token:
+    description: "GitHub token for repository access"
+    required: true
+  language:
+    description: "Language to analyze (java, javascript, python, etc.)"
+    required: false
+    default: "java"
+  queries:
+    description: "CodeQL query suite to run"
+    required: false
+    default: "security-and-quality"
+  category:
+    description: "Category for the analysis results"
+    required: false
+    default: "codeql-analysis"
+  java-version:
+    description: "Java version to use for analysis"
+    required: false
+    default: "21"
+  branch:
+    description: "Branch name for results upload (e.g., main, develop)"
+    required: false
+    default: "main"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.ref }}
+        token: ${{ inputs.token }}
+        fetch-depth: 0
+
+    - name: Set up JDK
+      if: ${{ inputs.language == 'java' }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ inputs.language }}
+        queries: ${{ inputs.queries }}
+
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: ${{ inputs.category }}
+        upload: false
+        output: ${{ runner.temp }}/codeql-results
+    
+    - name: Upload SARIF to backend repository
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ runner.temp }}/codeql-results/${{ inputs.language }}.sarif
+        repository: ${{ inputs.repository }}
+        ref: refs/heads/${{ inputs.branch }}
+        sha: ${{ inputs.ref }}
+        token: ${{ inputs.token }}

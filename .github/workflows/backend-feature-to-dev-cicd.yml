@@ -200,33 +200,20 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - name: Checkout backend repository
+      - name: Checkout devops repository (for action)
         uses: actions/checkout@v4
+
+      - name: Run CodeQL Analysis
+        uses: ./.github/actions/codeql-analyze
         with:
           repository: ${{ secrets.BACKEND_REPO_NAME }}
           ref: ${{ inputs.commit_sha }}
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          fetch-depth: 0
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: java
+          language: java
           queries: security-and-quality
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "backend-feature-to-dev"
+          category: backend-feature-to-dev
+          java-version: "21"
+          branch: ${{ inputs.target_branch }}
 
   build-and-push:
     name: Build and Push Docker Images
