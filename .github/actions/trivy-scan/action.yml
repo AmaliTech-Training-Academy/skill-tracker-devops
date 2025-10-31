@@ -1,0 +1,68 @@
+name: Trivy Container Security Scan
+
+description: "Scan Docker images for vulnerabilities using Trivy"
+
+author: "Skill Tracker DevOps"
+
+inputs:
+  image:
+    description: "Docker image to scan (e.g., registry/repo:tag)"
+    required: true
+  severity:
+    description: "Severities to scan for (CRITICAL,HIGH,MEDIUM,LOW)"
+    required: false
+    default: "CRITICAL,HIGH"
+  exit-code:
+    description: "Exit code when vulnerabilities are found (0 or 1)"
+    required: false
+    default: "0"
+  format:
+    description: "Output format (table, json, sarif)"
+    required: false
+    default: "table"
+  output-file:
+    description: "Output file path (optional)"
+    required: false
+    default: ""
+
+outputs:
+  scan-result:
+    description: "Scan result (passed or failed)"
+    value: ${{ steps.scan.outputs.result }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Trivy vulnerability scanner
+      id: scan
+      shell: bash
+      run: |
+        echo "🔍 Scanning image: ${{ inputs.image }}"
+        echo "⚠️ Severity levels: ${{ inputs.severity }}"
+        
+        # Run Trivy scan
+        if [ -n "${{ inputs.output-file }}" ]; then
+          trivy image \
+            --severity ${{ inputs.severity }} \
+            --exit-code ${{ inputs.exit-code }} \
+            --format ${{ inputs.format }} \
+            --output ${{ inputs.output-file }} \
+            ${{ inputs.image }}
+          SCAN_EXIT=$?
+        else
+          trivy image \
+            --severity ${{ inputs.severity }} \
+            --exit-code ${{ inputs.exit-code }} \
+            --format ${{ inputs.format }} \
+            ${{ inputs.image }}
+          SCAN_EXIT=$?
+        fi
+        
+        if [ $SCAN_EXIT -eq 0 ]; then
+          echo "✅ Security scan passed"
+          echo "result=passed" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Security vulnerabilities found"
+          echo "result=failed" >> $GITHUB_OUTPUT
+          exit $SCAN_EXIT
+        fi
