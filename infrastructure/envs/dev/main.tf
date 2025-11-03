@@ -316,7 +316,7 @@ module "amplify" {
           commands:
             - echo "Forcing npm install instead of npm ci"
             - rm -f package-lock.json
-            - npm install
+            - npm install --legacy-peer-deps
             - echo "Creating .env file with environment variables"
             - echo "NG_APP_URL=$NG_APP_URL" > .env
             - cat .env

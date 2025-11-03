@@ -5,8 +5,6 @@ name: Manual Service Deploy
 
 on:
   workflow_dispatch:
-    branches:
-      - dev
     inputs:
       service_name:
         description: 'Service to deploy'
@@ -168,15 +166,13 @@ jobs:
     steps:
       - name: Debug repository info
         run: |
-          echo "🔍 Repository being checked out: AmaliTech-Training-Academy/skill-tracker-backend"
-          echo "🌿 Branch: dev"
+          echo "🔍 Repository being checked out: ${{ secrets.BACKEND_REPO_NAME }}"
           echo "🏷️ Image tag to use: ${{ needs.validate-inputs.outputs.image_tag }}"
       
       - name: Checkout backend repository
         uses: actions/checkout@v4
         with:
-          repository: AmaliTech-Training-Academy/skill-tracker-backend
-          ref: dev
+          repository: ${{ secrets.BACKEND_REPO_NAME }}
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           fetch-depth: 0
       

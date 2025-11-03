@@ -10,13 +10,28 @@ resource "aws_amplify_app" "frontend" {
       phases:
         preBuild:
           commands:
-            - npm install
+            - echo "Forcing npm install instead of npm ci"
+            - rm -f package-lock.json
+            - npm install --legacy-peer-deps
             - echo "Creating .env file with environment variables"
             - echo "NG_APP_URL=$NG_APP_URL" > .env
             - cat .env
         build:
           commands:
             - npx ng build
+        postBuild:
+          commands:
+            - |
+              cat > dist/SkillBoost/browser/_redirects << 'EOF'
+              /signup /index.html 200
+              /signup/ /index.html 200
+              /login /index.html 200
+              /login/ /index.html 200
+              /dashboard /index.html 200
+              /dashboard/ /index.html 200
+              /dashboard/* /index.html 200
+              /* /index.html 200
+              EOF
       artifacts:
         baseDirectory: ${var.build_output_directory}
         files:

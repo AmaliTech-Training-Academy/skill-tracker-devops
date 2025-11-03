@@ -91,45 +91,21 @@ runs:
           exit 1
         fi
 
-        # Encode SARIF file to base64 and save to file
-        echo "🔄 Encoding SARIF file..."
-        cat "$SARIF_FILE" | gzip | base64 -w 0 > /tmp/sarif_base64.txt
+        # Encode SARIF file to base64
+        SARIF_BASE64=$(cat "$SARIF_FILE" | gzip | base64 -w 0)
 
-        # Create JSON payload using Python (reads from file, no arg limits)
-        python3 > /tmp/payload.json << 'PYTHON_EOF'
-        import json
-        
-        # Read base64 SARIF from file
-        with open('/tmp/sarif_base64.txt', 'r') as f:
-            sarif_base64 = f.read().strip()
-        
-        payload = {
-            "commit_sha": "${{ inputs.ref }}",
-            "ref": "refs/heads/${{ inputs.branch }}",
-            "sarif": sarif_base64,
-            "tool_name": "CodeQL"
-        }
-        
-        print(json.dumps(payload))
-        PYTHON_EOF
-
-        # Upload using GitHub API with payload from file
-        echo "📤 Uploading to GitHub..."
+        # Upload using GitHub API
         RESPONSE=$(curl -X POST \
           -H "Accept: application/vnd.github+json" \
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -H "X-GitHub-Api-Version: 2022-11-28" \
-          -H "Content-Type: application/json" \
           "https://api.github.com/repos/$OWNER/$REPO_NAME/code-scanning/sarifs" \
-          --data-binary @/tmp/payload.json \
+          -d "{\"commit_sha\":\"${{ inputs.ref }}\",\"ref\":\"refs/heads/${{ inputs.branch }}\",\"sarif\":\"$SARIF_BASE64\",\"tool_name\":\"CodeQL\"}" \
           -w "\n%{http_code}" \
           -s)
 
         HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
         BODY=$(echo "$RESPONSE" | head -n -1)
-
-        # Cleanup temporary files
-        rm -f /tmp/sarif_base64.txt /tmp/payload.json
 
         if [ "$HTTP_CODE" -eq 202 ]; then
           echo "✅ CodeQL results uploaded successfully (HTTP $HTTP_CODE)"
