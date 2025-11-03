@@ -239,6 +239,11 @@ jobs:
         service: ${{ fromJSON(needs.detect-changes.outputs.services_json) }}
 
     steps:
+      - name: Checkout devops repository (for slack action)
+        uses: actions/checkout@v4
+        with:
+          path: devops-repo
+
       - name: Checkout backend repository
         uses: actions/checkout@v4
         with:
@@ -300,6 +305,74 @@ jobs:
             -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:latest \
             -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }} \
             .
+
+      - name: Run Trivy security scan
+        id: trivy-scan
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}
+          format: 'json'
+          output: 'trivy-results-${{ matrix.service.name }}.json'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Parse Trivy results and check for critical vulnerabilities
+        id: check-vulns
+        if: always()
+        run: |
+          if [ -f "trivy-results-${{ matrix.service.name }}.json" ]; then
+            CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-results-${{ matrix.service.name }}.json)
+            HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-results-${{ matrix.service.name }}.json)
+            
+            echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+            echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+            
+            echo "🔍 Security Scan Results for ${{ matrix.service.name }}:"
+            echo "   CRITICAL: $CRITICAL_COUNT"
+            echo "   HIGH: $HIGH_COUNT"
+            
+            if [ "$CRITICAL_COUNT" -gt 0 ]; then
+              echo "has_critical=true" >> $GITHUB_OUTPUT
+              echo "⚠️ CRITICAL vulnerabilities found!"
+            else
+              echo "has_critical=false" >> $GITHUB_OUTPUT
+              echo "✅ No CRITICAL vulnerabilities"
+            fi
+          else
+            echo "has_critical=false" >> $GITHUB_OUTPUT
+            echo "critical_count=0" >> $GITHUB_OUTPUT
+            echo "high_count=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Slack on critical vulnerabilities
+        if: steps.check-vulns.outputs.has_critical == 'true'
+        uses: ./devops-repo/.github/actions/slack-notify
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": ":rotating_light: CRITICAL Security Vulnerabilities Found - ${{ matrix.service.name }}",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    { "title": "🐳 Service", "value": "${{ matrix.service.name }}", "short": true },
+                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "🔴 CRITICAL", "value": "${{ steps.check-vulns.outputs.critical_count }}", "short": true },
+                    { "title": "🟠 HIGH", "value": "${{ steps.check-vulns.outputs.high_count }}", "short": true },
+                    { "title": "📦 Image", "value": "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}", "short": false },
+                    { "title": "PR", "value": "${{ inputs.pr_title }}", "short": false },
+                    { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
+                    { "title": "⚠️ Action Required", "value": "Review and fix critical vulnerabilities before deploying to production", "short": false },
+                    { "title": "🔗 View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
+                  ],
+                  "footer": "Trivy Container Security Scan",
+                  "footer_icon": "https://github.githubassets.com/favicon.ico"
+                }
+              ]
+            }
 
       - name: Push Docker image to ECR
         run: |
