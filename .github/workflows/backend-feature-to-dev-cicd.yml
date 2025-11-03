@@ -207,6 +207,7 @@ jobs:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
     needs: detect-changes
+    if: needs.detect-changes.outputs.services_json != '[]'
     continue-on-error: true
 
     strategy:
@@ -484,7 +485,7 @@ jobs:
     name: Deploy Business Services (Image-Only Updates)
     runs-on: ubuntu-latest
     needs: [build-and-push, deploy-infra, detect-changes]
-    if: inputs.enable_ecs_deploy && always() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
+    if: inputs.enable_ecs_deploy && needs.detect-changes.outputs.business_services_json != '[]' && always() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
 
     strategy:
       matrix:
