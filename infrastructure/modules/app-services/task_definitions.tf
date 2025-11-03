@@ -399,3 +399,111 @@ resource "aws_ecs_task_definition" "user_service" {
 
   tags = var.tags
 }
+
+
+# Task Service Task Definition (starts after config server)
+resource "aws_ecs_task_definition" "task_service" {
+  family                   = "${var.project_name}-${var.environment}-task-service"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "512"
+  memory                   = "1024"
+  execution_role_arn       = var.ecs_task_execution_role_arn
+  task_role_arn           = var.ecs_task_role_arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "task-service"
+      image     = "${var.ecr_repository_urls["task-service"]}:latest"
+      essential = true
+      
+      portMappings = [
+        {
+          containerPort = 8085
+          protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        {
+          name  = "CONFIG_HOST"
+          value = "config-server.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "CONFIG_PORT"
+          value = "8081"
+        },
+        {
+          name  = "DISCOVERY_HOST"
+          value = "discovery-server.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "DISCOVERY_PORT"
+          value = "8082"
+        },
+        {
+          name  = "SERVER_PORT"
+          value = "8085"
+        },
+        {
+          name  = "SPRING_PROFILES_ACTIVE"
+          value = "dev"
+        },
+        {
+          name  = "EUREKA_INSTANCE_PREFER_IP_ADDRESS"
+          value = "false"
+        },
+        {
+          name  = "EUREKA_INSTANCE_HOSTNAME"
+          value = "task-service.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "POSTGRES_HOST"
+          value = split(":", var.rds_endpoint)[0]
+        },
+        {
+          name  = "POSTGRES_DB"
+          value = var.rds_db_name
+        },
+        {
+          name  = "SPRING_JPA_HIBERNATE_DDL_AUTO"
+          value = "update"
+        },
+        {
+          name  = "OPENAI_API_KEY"
+          value = "dummy-key-for-now"
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "POSTGRES_USER"
+          valueFrom = "${var.rds_secret_arn}:username::"
+        },
+        {
+          name      = "POSTGRES_PASSWORD"
+          valueFrom = "${var.rds_secret_arn}:password::"
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_groups["task-service"]
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "task-service"
+        }
+      }
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "nc -z localhost 8085 || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 120
+      }
+    }
+  ])
+
+  tags = var.tags
+}
