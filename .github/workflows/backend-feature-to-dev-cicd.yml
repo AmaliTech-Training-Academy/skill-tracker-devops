@@ -754,9 +754,8 @@ jobs:
                     { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
                     { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
                     { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
-                    { "title": "Failed Services", "value": "${{ steps.build-details.outputs.failed-services }}", "short": false },
-                    { "title": "Action Required", "value": "Check build logs for compilation errors, dependency issues, or Docker build failures", "short": false },
-                    { "title": "View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
+                    { "title": "⚠️ Action Required", "value": "Check build logs for compilation errors, dependency issues, or Docker build failures.", "short": false },
+                    { "title": "🔗 View Details", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions Logs>", "short": true }
                   ],
                   "footer": "GitHub Actions - Build Failure",
                   "footer_icon": "https://github.githubassets.com/favicon.ico"
@@ -851,10 +850,8 @@ jobs:
                     { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
                     { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
                     { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
-                    { "title": "Failed Services", "value": "${{ steps.deploy-details.outputs.failed-services }}", "short": false },
-                    { "title": "Current Service Status", "value": "${{ steps.ecs-status.outputs.service-status }}", "short": false },
-                    { "title": "Troubleshooting", "value": "${{ steps.deploy-details.outputs.troubleshooting }}", "short": false },
-                    { "title": "View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
+                    { "title": "⚠️ Action Required", "value": "Check ECS service events, task logs, and deployment status in AWS Console.", "short": false },
+                    { "title": "🔗 View Details", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions Logs>", "short": true }
                   ],
                   "footer": "GitHub Actions - Deployment Failure",
                   "footer_icon": "https://github.githubassets.com/favicon.ico"
