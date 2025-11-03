@@ -937,9 +937,8 @@ jobs:
                     { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
                     { "title": "❌ Unhealthy Services", "value": "${{ steps.health-details.outputs.unhealthy-services }}", "short": false },
                     { "title": "✅ Healthy Services", "value": "${{ steps.health-details.outputs.healthy-services }}", "short": false },
-                    { "title": "Recent Events", "value": "${{ steps.health-details.outputs.recent-events }}", "short": false },
-                    { "title": "Action Required", "value": "Automatic rollback initiated. Check ECS task logs and service events.", "short": false },
-                    { "title": "View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
+                    { "title": "⚠️ Action Required", "value": "Automatic rollback initiated. Check ECS task logs and service events in AWS Console.", "short": false },
+                    { "title": "🔗 View Details", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions Logs>", "short": true }
                   ],
                   "footer": "GitHub Actions - Health Check Failure",
                   "footer_icon": "https://github.githubassets.com/favicon.ico"
