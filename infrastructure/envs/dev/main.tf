@@ -202,15 +202,42 @@ module "monitoring" {
   ecs_log_group    = module.ecs.log_groups["cluster"]
   rds_instance_id  = module.rds.db_instance_id
 
-  # ALB alarms - uncomment after first deployment when ALB exists
-  # alb_arn               = module.ecs.alb_arn
-  # alb_target_group_arn  = module.ecs.target_group_arn
+  # ALB alarms
+  alb_arn               = module.ecs.alb_arn
+  alb_target_group_arn  = module.ecs.target_group_arn
 
   enable_vpc_flow_logs  = var.enable_vpc_flow_logs
   log_retention_days    = 30
   alarm_email_endpoints = var.alarm_email_endpoints
 
   tags = local.common_tags
+}
+
+# Observability Module - Prometheus + Grafana + ADOT
+module "observability" {
+  source = "../../modules/observability"
+
+  project_name     = local.project_name
+  environment      = local.environment
+  vpc_id           = module.networking.vpc_id
+  vpc_cidr         = module.networking.vpc_cidr
+  public_subnet_id = module.networking.public_subnet_ids[0]
+  ecs_cluster_name = module.ecs.cluster_name
+  aws_region       = var.aws_region
+
+  # Instance configuration (t3.medium is default)
+  instance_type          = "t3.medium"
+  prometheus_version     = "2.48.0"
+  grafana_version        = "10.2.2"
+  prometheus_volume_size = 50
+  create_elastic_ip      = true
+
+  # Security - IMPORTANT: Restrict to your IP in production
+  allowed_cidr_blocks = ["0.0.0.0/0"]  # TODO: Change to your IP
+
+  tags = local.common_tags
+
+  depends_on = [module.ecs, module.networking]
 }
 
 # EFS Module - Persistent storage for data services

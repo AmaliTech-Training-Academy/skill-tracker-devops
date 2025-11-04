@@ -65,6 +65,33 @@ output "monitoring_dashboards" {
   }
 }
 
+# Observability Outputs
+output "prometheus_url" {
+  description = "Prometheus web UI URL"
+  value       = module.observability.prometheus_url
+}
+
+output "grafana_url" {
+  description = "Grafana web UI URL"
+  value       = module.observability.grafana_url
+}
+
+output "grafana_credentials" {
+  description = "Default Grafana credentials"
+  value       = "Username: admin, Password: admin (change on first login)"
+}
+
+output "monitoring_instance_ip" {
+  description = "Monitoring EC2 instance Elastic IP"
+  value       = module.observability.elastic_ip
+}
+
+output "prometheus_endpoint" {
+  description = "Prometheus remote write endpoint for ADOT sidecars"
+  value       = module.observability.prometheus_endpoint
+  sensitive   = true
+}
+
 # Data Services Outputs
 # TODO: Uncomment when data_services and efs modules are created
 # output "mongodb_endpoint" {
