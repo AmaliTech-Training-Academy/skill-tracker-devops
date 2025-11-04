@@ -172,7 +172,7 @@ module "rds" {
 
   db_name              = var.db_name
   db_username          = var.db_username
-  db_engine_version    = "16.8"
+  db_engine_version    = "15.14"
   db_instance_class    = "db.t3.micro"
   db_allocated_storage = 20
   db_storage_type      = "gp3"
@@ -314,9 +314,10 @@ module "amplify" {
       phases:
         preBuild:
           commands:
-            - echo "Forcing npm install instead of npm ci"
-            - rm -f package-lock.json
-            - npm install --legacy-peer-deps
+            - nvm use 20
+            - node --version
+            - npm --version
+            - npm ci
             - echo "Creating .env file with environment variables"
             - echo "NG_APP_URL=$NG_APP_URL" > .env
             - cat .env
