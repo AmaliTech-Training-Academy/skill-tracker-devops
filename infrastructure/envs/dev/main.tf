@@ -58,18 +58,22 @@ module "s3" {
 module "ecs" {
   source = "../../modules/ecs"
 
-  project_name              = local.project_name
-  environment               = local.environment
-  vpc_id                    = module.networking.vpc_id
-  vpc_cidr                  = module.networking.vpc_cidr
-  public_subnet_ids         = module.networking.public_subnet_ids
-  private_subnet_ids        = module.networking.private_subnet_ids
-  container_port            = var.container_port
-  enable_container_insights = true
-  log_retention_days        = 30
-  create_alb                = true
-  health_check_path         = "/actuator/health"
+  project_name                 = local.project_name
+  environment                  = local.environment
+  vpc_id                       = module.networking.vpc_id
+  vpc_cidr                     = module.networking.vpc_cidr
+  public_subnet_ids            = module.networking.public_subnet_ids
+  private_subnet_ids           = module.networking.private_subnet_ids
+  container_port               = var.container_port
+  enable_container_insights    = true
+  log_retention_days           = 30
+  create_alb                   = true
+  health_check_path            = "/actuator/health"
+  monitoring_security_group_id = module.observability.monitoring_security_group_id
+  adot_exporter_port           = 8889
+  enable_metrics_ingress      = true
 
+  tags = local.common_tags
   services = {
     api-gateway = {
       min_capacity        = 1
@@ -156,8 +160,6 @@ module "ecs" {
       port                = 8091
     }
   }
-
-  tags = local.common_tags
 }
 
 # RDS Module - PostgreSQL for user-service
@@ -202,9 +204,9 @@ module "monitoring" {
   ecs_log_group    = module.ecs.log_groups["cluster"]
   rds_instance_id  = module.rds.db_instance_id
 
-  # ALB alarms - uncomment after first deployment when ALB exists
-  # alb_arn               = module.ecs.alb_arn
-  # alb_target_group_arn  = module.ecs.target_group_arn
+  # ALB alarms
+  alb_arn              = module.ecs.alb_arn
+  alb_target_group_arn = module.ecs.target_group_arn
 
   enable_vpc_flow_logs  = var.enable_vpc_flow_logs
   log_retention_days    = 30
@@ -213,15 +215,37 @@ module "monitoring" {
   tags = local.common_tags
 }
 
+# Observability Module - EC2 with Prometheus + Grafana
+module "observability" {
+  source = "../../modules/observability"
+
+  project_name = local.project_name
+  environment  = local.environment
+  aws_region   = var.aws_region
+
+  vpc_id            = module.networking.vpc_id
+  public_subnet_ids = module.networking.public_subnet_ids
+
+  service_discovery_namespace = "${local.environment}.${local.project_name}.local"
+  adot_exporter_port          = 8889
+  grafana_admin_password      = "admin"
+
+  # Restrict as needed
+  ssh_allowed_cidrs = []
+  web_allowed_cidrs = ["0.0.0.0/0"]
+
+  tags = local.common_tags
+}
+
 # EFS Module - Persistent storage for data services
 module "efs" {
   source = "../../modules/efs"
 
-  project_name           = local.project_name
-  environment            = local.environment
-  vpc_id                 = module.networking.vpc_id
-  private_subnet_ids     = module.networking.private_subnet_ids
-  ecs_security_group_id  = module.ecs.ecs_tasks_security_group_id
+  project_name          = local.project_name
+  environment           = local.environment
+  vpc_id                = module.networking.vpc_id
+  private_subnet_ids    = module.networking.private_subnet_ids
+  ecs_security_group_id = module.ecs.ecs_tasks_security_group_id
 
   tags = local.common_tags
 }
@@ -230,23 +254,23 @@ module "efs" {
 module "data_services" {
   source = "../../modules/data-services"
 
-  project_name               = local.project_name
-  environment                = local.environment
-  vpc_id                     = module.networking.vpc_id
-  private_subnet_ids         = module.networking.private_subnet_ids
-  ecs_cluster_id             = module.ecs.cluster_id
-  ecs_security_group_id      = module.ecs.ecs_tasks_security_group_id
+  project_name                = local.project_name
+  environment                 = local.environment
+  vpc_id                      = module.networking.vpc_id
+  private_subnet_ids          = module.networking.private_subnet_ids
+  ecs_cluster_id              = module.ecs.cluster_id
+  ecs_security_group_id       = module.ecs.ecs_tasks_security_group_id
   ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
-  ecs_task_role_arn          = module.iam.ecs_task_role_arn
+  ecs_task_role_arn           = module.iam.ecs_task_role_arn
 
   # EFS configuration
-  efs_file_system_id      = module.efs.file_system_id
-  mongodb_access_point_id = module.efs.mongodb_access_point_id
-  redis_access_point_id   = module.efs.redis_access_point_id
+  efs_file_system_id       = module.efs.file_system_id
+  mongodb_access_point_id  = module.efs.mongodb_access_point_id
+  redis_access_point_id    = module.efs.redis_access_point_id
   rabbitmq_access_point_id = module.efs.rabbitmq_access_point_id
 
-  aws_region          = var.aws_region
-  log_retention_days  = 30
+  aws_region         = var.aws_region
+  log_retention_days = 30
 
   tags = local.common_tags
 
@@ -272,27 +296,31 @@ module "app_services" {
   environment  = local.environment
   aws_region   = var.aws_region
 
-  ecs_cluster_id                   = module.ecs.cluster_id
-  private_subnet_ids               = module.networking.private_subnet_ids
-  ecs_security_group_id            = module.ecs.ecs_tasks_security_group_id
-  ecs_task_execution_role_arn      = module.iam.ecs_task_execution_role_arn
-  ecs_task_role_arn                = module.iam.ecs_task_role_arn
-  
-  ecr_repository_urls              = module.ecs.ecr_repository_urls
-  log_groups                       = module.ecs.log_groups
-  service_discovery_namespace_id   = module.data_services.service_discovery_namespace_id
-  service_discovery_namespace      = "${local.environment}.${local.project_name}.local"
-  alb_target_group_arn             = module.ecs.target_group_arn
-  
-  rds_endpoint                     = module.rds.db_instance_endpoint
-  rds_db_name                      = module.rds.db_name
-  rds_secret_arn                   = module.rds.secrets_manager_secret_arn
-  
+  ecs_cluster_id              = module.ecs.cluster_id
+  private_subnet_ids          = module.networking.private_subnet_ids
+  ecs_security_group_id       = module.ecs.ecs_tasks_security_group_id
+  ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
+  ecs_task_role_arn           = module.iam.ecs_task_role_arn
+
+  ecr_repository_urls            = module.ecs.ecr_repository_urls
+  log_groups                     = module.ecs.log_groups
+  service_discovery_namespace_id = module.data_services.service_discovery_namespace_id
+  service_discovery_namespace    = "${local.environment}.${local.project_name}.local"
+  alb_target_group_arn           = module.ecs.target_group_arn
+
+  rds_endpoint   = module.rds.db_instance_endpoint
+  rds_db_name    = module.rds.db_name
+  rds_secret_arn = module.rds.secrets_manager_secret_arn
+
   config_repo = "thenoblet/skilltracker-config"
 
   tags = local.common_tags
 
   depends_on = [module.data_services, module.ecs]
+
+  # Observability
+  enable_adot_sidecar = true
+  adot_exporter_port  = 8889
 }
 
 # Amplify Module - Frontend (handled by colleague)
@@ -314,10 +342,9 @@ module "amplify" {
       phases:
         preBuild:
           commands:
-            - nvm use 20
-            - node --version
-            - npm --version
-            - npm ci
+            - echo "Forcing npm install instead of npm ci"
+            - rm -f package-lock.json
+            - npm install
             - echo "Creating .env file with environment variables"
             - echo "NG_APP_URL=$NG_APP_URL" > .env
             - cat .env

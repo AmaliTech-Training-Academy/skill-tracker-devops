@@ -8,7 +8,7 @@ resource "aws_ecs_task_definition" "discovery_server" {
   execution_role_arn       = var.ecs_task_execution_role_arn
   task_role_arn           = var.ecs_task_role_arn
 
-  container_definitions = jsonencode([
+  container_definitions = jsonencode(concat([
     {
       name      = "discovery-server"
       image     = "${var.ecr_repository_urls["discovery-server"]}:latest"
@@ -49,7 +49,50 @@ resource "aws_ecs_task_definition" "discovery_server" {
         startPeriod = 60
       }
     }
-  ])
+  ], var.enable_adot_sidecar ? [
+    {
+      name      = "adot-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+      portMappings = [
+        {
+          containerPort = var.adot_exporter_port
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
+        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'spring-discovery'
+          metrics_path: /actuator/prometheus
+          static_configs:
+            - targets: ['localhost:8082']
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:${var.adot_exporter_port}
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [prometheus]
+EOT
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_groups["cluster"]
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "adot"
+        }
+      }
+    }
+  ] : []))
 
   tags = var.tags
 }
@@ -64,7 +107,7 @@ resource "aws_ecs_task_definition" "config_server" {
   execution_role_arn       = var.ecs_task_execution_role_arn
   task_role_arn           = var.ecs_task_role_arn
 
-  container_definitions = jsonencode([
+  container_definitions = jsonencode(concat([
     {
       name      = "config-server"
       image     = "${var.ecr_repository_urls["config-server"]}:latest"
@@ -109,7 +152,50 @@ resource "aws_ecs_task_definition" "config_server" {
         startPeriod = 180
       }
     }
-  ])
+  ], var.enable_adot_sidecar ? [
+    {
+      name      = "adot-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+      portMappings = [
+        {
+          containerPort = var.adot_exporter_port
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
+        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'spring-config'
+          metrics_path: /actuator/prometheus
+          static_configs:
+            - targets: ['localhost:8081']
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:${var.adot_exporter_port}
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [prometheus]
+EOT
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_groups["cluster"]
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "adot"
+        }
+      }
+    }
+  ] : []))
 
   tags = var.tags
 }
@@ -124,7 +210,7 @@ resource "aws_ecs_task_definition" "api_gateway" {
   execution_role_arn       = var.ecs_task_execution_role_arn
   task_role_arn           = var.ecs_task_role_arn
 
-  container_definitions = jsonencode([
+  container_definitions = jsonencode(concat([
     {
       name      = "api-gateway"
       image     = "${var.ecr_repository_urls["api-gateway"]}:latest"
@@ -180,7 +266,50 @@ resource "aws_ecs_task_definition" "api_gateway" {
         startPeriod = 90
       }
     }
-  ])
+  ], var.enable_adot_sidecar ? [
+    {
+      name      = "adot-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+      portMappings = [
+        {
+          containerPort = var.adot_exporter_port
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
+        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'spring-gateway'
+          metrics_path: /actuator/prometheus
+          static_configs:
+            - targets: ['localhost:8080']
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:${var.adot_exporter_port}
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [prometheus]
+EOT
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_groups["cluster"]
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "adot"
+        }
+      }
+    }
+  ] : []))
 
   tags = var.tags
 }
@@ -195,7 +324,7 @@ resource "aws_ecs_task_definition" "user_service" {
   execution_role_arn       = var.ecs_task_execution_role_arn
   task_role_arn           = var.ecs_task_role_arn
 
-  container_definitions = jsonencode([
+  container_definitions = jsonencode(concat([
     {
       name      = "user-service"
       image     = "${var.ecr_repository_urls["user-service"]}:latest"
@@ -395,7 +524,50 @@ resource "aws_ecs_task_definition" "user_service" {
         startPeriod = 120
       }
     }
-  ])
+  ], var.enable_adot_sidecar ? [
+    {
+      name      = "adot-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+      portMappings = [
+        {
+          containerPort = var.adot_exporter_port
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
+        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'spring-user'
+          metrics_path: /actuator/prometheus
+          static_configs:
+            - targets: ['localhost:8084']
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:${var.adot_exporter_port}
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [prometheus]
+EOT
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_groups["cluster"]
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "adot"
+        }
+      }
+    }
+  ] : []))
 
   tags = var.tags
 }
@@ -411,7 +583,7 @@ resource "aws_ecs_task_definition" "task_service" {
   execution_role_arn       = var.ecs_task_execution_role_arn
   task_role_arn           = var.ecs_task_role_arn
 
-  container_definitions = jsonencode([
+  container_definitions = jsonencode(concat([
     {
       name      = "task-service"
       image     = "${var.ecr_repository_urls["task-service"]}:latest"
@@ -503,7 +675,50 @@ resource "aws_ecs_task_definition" "task_service" {
         startPeriod = 120
       }
     }
-  ])
+  ], var.enable_adot_sidecar ? [
+    {
+      name      = "adot-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+      portMappings = [
+        {
+          containerPort = var.adot_exporter_port
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
+        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'spring-task'
+          metrics_path: /actuator/prometheus
+          static_configs:
+            - targets: ['localhost:8085']
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:${var.adot_exporter_port}
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [prometheus]
+EOT
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_groups["cluster"]
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "adot"
+        }
+      }
+    }
+  ] : []))
 
   tags = var.tags
 }

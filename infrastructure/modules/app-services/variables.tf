@@ -92,3 +92,21 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_adot_sidecar" {
+  description = "Enable AWS Distro for OpenTelemetry (ADOT) sidecar in task definitions"
+  type        = bool
+  default     = false
+}
+
+variable "adot_exporter_port" {
+  description = "Port exposed by ADOT prometheus exporter for Prometheus scraping"
+  type        = number
+  default     = 8889
+}
+
+variable "monitoring_security_group_id" {
+  description = "Security group ID of the monitoring host (Prometheus) allowed to scrape ADOT exporter"
+  type        = string
+  default     = null
+}

@@ -67,6 +67,18 @@ resource "aws_security_group_rule" "ecs_tasks_ingress_alb" {
   description       = "Allow traffic from ALB"
 }
 
+# Optional: allow Prometheus (on a monitoring SG) to scrape ADOT exporter
+resource "aws_security_group_rule" "ecs_tasks_ingress_metrics" {
+  count                    = var.enable_metrics_ingress ? 1 : 0
+  type                     = "ingress"
+  from_port                = var.adot_exporter_port
+  to_port                  = var.adot_exporter_port
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.ecs_tasks.id
+  source_security_group_id = var.monitoring_security_group_id
+  description              = "Allow Prometheus scraping ADOT exporter on tasks"
+}
+
 # Security Group for Application Load Balancer
 resource "aws_security_group" "alb" {
   count       = var.create_alb ? 1 : 0
