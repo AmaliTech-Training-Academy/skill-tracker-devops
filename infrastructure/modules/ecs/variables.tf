@@ -99,3 +99,21 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "monitoring_security_group_id" {
+  description = "Security group ID of the monitoring host (e.g., Prometheus EC2) allowed to scrape task exporters"
+  type        = string
+  default     = null
+}
+
+variable "adot_exporter_port" {
+  description = "Port used by ADOT Prometheus exporter in sidecars"
+  type        = number
+  default     = 8889
+}
+
+variable "enable_metrics_ingress" {
+  description = "Enable ingress rule to allow Prometheus to scrape ADOT exporters"
+  type        = bool
+  default     = false
+}
