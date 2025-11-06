@@ -18,6 +18,9 @@ if ! docker compose version >/dev/null 2>&1; then
   sudo dnf install -y docker-compose-plugin || true
 fi
 
+# Create a dedicated Docker network for inter-container DNS
+sudo docker network inspect observability-net >/dev/null 2>&1 || sudo docker network create observability-net
+
 # Create directories
 sudo mkdir -p /opt/observability/prometheus
 sudo mkdir -p /opt/observability/grafana/provisioning/datasources
@@ -60,13 +63,14 @@ datasources:
     access: proxy
     orgId: 1
     isDefault: true
-    url: http://localhost:9090
+    url: http://prometheus:9090
     editable: true
 EOF
 
 # Run Prometheus
 sudo docker rm -f prometheus || true
 sudo docker run -d --name prometheus \
+  --network observability-net \
   -p 9090:9090 \
   -v /opt/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml \
   --restart unless-stopped \
@@ -75,6 +79,7 @@ sudo docker run -d --name prometheus \
 # Run Grafana
 sudo docker rm -f grafana || true
 sudo docker run -d --name grafana \
+  --network observability-net \
   -p 3000:3000 \
   -e GF_SECURITY_ADMIN_PASSWORD="$${GRAFANA_ADMIN_PASSWORD}" \
   -v /opt/observability/grafana:/var/lib/grafana \

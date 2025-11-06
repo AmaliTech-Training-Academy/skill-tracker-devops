@@ -63,7 +63,7 @@ resource "aws_ecs_task_definition" "discovery_server" {
       environment = [
         { name = "AWS_REGION", value = var.aws_region },
         { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
-        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+        { name = "AOT_CONFIG_CONTENT", value = <<-EOT
 receivers:
   prometheus:
     config:
@@ -166,7 +166,7 @@ resource "aws_ecs_task_definition" "config_server" {
       environment = [
         { name = "AWS_REGION", value = var.aws_region },
         { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
-        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+        { name = "AOT_CONFIG_CONTENT", value = <<-EOT
 receivers:
   prometheus:
     config:
@@ -280,7 +280,7 @@ resource "aws_ecs_task_definition" "api_gateway" {
       environment = [
         { name = "AWS_REGION", value = var.aws_region },
         { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
-        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+        { name = "AOT_CONFIG_CONTENT", value = <<-EOT
 receivers:
   prometheus:
     config:
@@ -538,7 +538,7 @@ resource "aws_ecs_task_definition" "user_service" {
       environment = [
         { name = "AWS_REGION", value = var.aws_region },
         { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
-        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+        { name = "AOT_CONFIG_CONTENT", value = <<-EOT
 receivers:
   prometheus:
     config:
@@ -689,7 +689,7 @@ resource "aws_ecs_task_definition" "task_service" {
       environment = [
         { name = "AWS_REGION", value = var.aws_region },
         { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
-        { name = "AWS_OTEL_COLLECTOR_CONFIG_CONTENT", value = <<-EOT
+        { name = "AOT_CONFIG_CONTENT", value = <<-EOT
 receivers:
   prometheus:
     config:
