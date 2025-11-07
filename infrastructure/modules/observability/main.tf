@@ -60,17 +60,18 @@ resource "aws_security_group" "monitoring" {
 }
 
 resource "aws_instance" "monitoring" {
-  ami           = data.aws_ami.amazon_linux.id
-  instance_type = var.instance_type
-  subnet_id     = var.public_subnet_ids[0]
-  vpc_security_group_ids = [aws_security_group.monitoring.id]
+  ami                         = data.aws_ami.amazon_linux.id
+  instance_type               = var.instance_type
+  subnet_id                   = var.public_subnet_ids[0]
+  vpc_security_group_ids      = [aws_security_group.monitoring.id]
   associate_public_ip_address = true
+  iam_instance_profile        = aws_iam_instance_profile.monitoring.name
 
   user_data = templatefile("${path.module}/user-data.sh", {
-    region                       = var.aws_region
-    service_discovery_namespace  = var.service_discovery_namespace
-    adot_exporter_port           = var.adot_exporter_port
-    grafana_admin_password       = var.grafana_admin_password
+    region                      = var.aws_region
+    service_discovery_namespace = var.service_discovery_namespace
+    adot_exporter_port          = var.adot_exporter_port
+    grafana_admin_password      = var.grafana_admin_password
   })
   user_data_replace_on_change = true
 
