@@ -220,8 +220,6 @@ jobs:
     steps:
       - name: Checkout devops repository (for slack action)
         uses: actions/checkout@v4
-        with:
-          path: devops-repo
 
       - name: Checkout backend repository
         uses: actions/checkout@v4
@@ -332,7 +330,7 @@ jobs:
 
       - name: Notify Slack on critical vulnerabilities
         if: steps.check-vulns.outputs.has_critical == 'true'
-        uses: ./devops-repo/.github/actions/slack-notify
+        uses: ./.github/actions/slack-notify
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
@@ -359,6 +357,7 @@ jobs:
             }
 
       - name: Push Docker image to ECR
+        if: always()
         run: |
           echo "📤 Pushing ${{ matrix.service.name }} to ECR"
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:latest
