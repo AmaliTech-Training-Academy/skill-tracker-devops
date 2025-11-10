@@ -392,7 +392,7 @@ resource "aws_ecs_task_definition" "user_service" {
         },
         {
           name  = "COOKIE_SECURE"
-          value = "false"
+          value = "true"
         },
         {
           name  = "BASE_URL"
