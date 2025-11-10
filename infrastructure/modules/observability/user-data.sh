@@ -23,11 +23,14 @@ sudo docker network inspect observability-net >/dev/null 2>&1 || sudo docker net
 
 # Create directories
 sudo mkdir -p /opt/observability/prometheus
+sudo mkdir -p /opt/observability/prometheus/data
 sudo mkdir -p /opt/observability/grafana/provisioning/datasources
 sudo mkdir -p /opt/observability/grafana/provisioning/dashboards
 
 # Ensure Grafana container (UID 472) can write/read mounted volumes
 sudo chown -R 472:472 /opt/observability/grafana || true
+# Ensure Prometheus container (UID 65534 nobody) can write data
+sudo chown -R 65534:65534 /opt/observability/prometheus/data || true
 
 # Prometheus config
 sudo tee /opt/observability/prometheus/prometheus.yml >/dev/null <<EOF
@@ -73,8 +76,15 @@ sudo docker run -d --name prometheus \
   --network observability-net \
   -p 9090:9090 \
   -v /opt/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml \
+  -v /opt/observability/prometheus/data:/prometheus \
   --restart unless-stopped \
-  prom/prometheus:latest
+  prom/prometheus:latest \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/prometheus \
+  --storage.tsdb.retention.time=15d \
+  --storage.tsdb.retention.size=10GB \
+  --web.console.libraries=/usr/share/prometheus/console_libraries \
+  --web.console.templates=/usr/share/prometheus/consoles
 
 # Run Grafana
 sudo docker rm -f grafana || true
