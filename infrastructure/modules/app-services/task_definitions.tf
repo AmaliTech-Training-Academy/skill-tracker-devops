@@ -722,3 +722,167 @@ EOT
 
   tags = var.tags
 }
+
+
+# Analytics Service Task Definition (starts after config server)
+resource "aws_ecs_task_definition" "analytics_service" {
+  family                   = "${var.project_name}-${var.environment}-analytics-service"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "512"
+  memory                   = "1024"
+  execution_role_arn       = var.ecs_task_execution_role_arn
+  task_role_arn           = var.ecs_task_role_arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "analytics-service"
+      image     = "${var.ecr_repository_urls["analytics-service"]}:latest"
+      essential = true
+      
+      portMappings = [
+        {
+          containerPort = 8086
+          protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        {
+          name  = "CONFIG_HOST"
+          value = "config-server.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "CONFIG_PORT"
+          value = "8081"
+        },
+        {
+          name  = "DISCOVERY_HOST"
+          value = "discovery-server.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "DISCOVERY_PORT"
+          value = "8082"
+        },
+        {
+          name  = "SERVER_PORT"
+          value = "8086"
+        },
+        {
+          name  = "SPRING_PROFILES_ACTIVE"
+          value = "dev"
+        },
+        {
+          name  = "EUREKA_INSTANCE_PREFER_IP_ADDRESS"
+          value = "false"
+        },
+        {
+          name  = "EUREKA_INSTANCE_HOSTNAME"
+          value = "analytics-service.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "POSTGRES_HOST"
+          value = split(":", var.rds_endpoint)[0]
+        },
+        {
+          name  = "POSTGRES_DB"
+          value = var.rds_db_name
+        },
+        {
+          name  = "SPRING_DATASOURCE_URL"
+          value = "jdbc:postgresql://${split(":", var.rds_endpoint)[0]}:5432/${var.rds_db_name}"
+        },
+        {
+          name  = "SPRING_JPA_HIBERNATE_DDL_AUTO"
+          value = "update"
+        },
+        {
+          name  = "SPRING_DATA_MONGODB_HOST"
+          value = "mongodb.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "SPRING_DATA_MONGODB_PORT"
+          value = "27017"
+        },
+        {
+          name  = "SPRING_DATA_MONGODB_DATABASE"
+          value = "analytics_db"
+        },
+        {
+          name  = "RABBITMQ_HOST"
+          value = "rabbitmq.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "RABBITMQ_PORT"
+          value = "5672"
+        }
+      ]
+
+      secrets = [
+        {
+          name      = "POSTGRES_USER"
+          valueFrom = "${var.rds_secret_arn}:username::"
+        },
+        {
+          name      = "POSTGRES_PASSWORD"
+          valueFrom = "${var.rds_secret_arn}:password::"
+        },
+        {
+          name      = "SPRING_DATASOURCE_USERNAME"
+          valueFrom = "${var.rds_secret_arn}:username::"
+        },
+        {
+          name      = "SPRING_DATASOURCE_PASSWORD"
+          valueFrom = "${var.rds_secret_arn}:password::"
+        },
+        {
+          name      = "SPRING_DATA_MONGODB_USERNAME"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-mongodb-credentials-7gkK4n:username::"
+        },
+        {
+          name      = "SPRING_DATA_MONGODB_PASSWORD"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-mongodb-credentials-7gkK4n:password::"
+        },
+        {
+          name      = "JWT_SECRET"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:JWT_SECRET::"
+        },
+        {
+          name      = "JWT_ACCESS_EXPIRATION"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:JWT_ACCESS_EXPIRATION::"
+        },
+        {
+          name      = "JWT_REFRESH_EXPIRATION"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:JWT_REFRESH_EXPIRATION::"
+        },
+        {
+          name      = "RABBITMQ_USER"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:username::"
+        },
+        {
+          name      = "RABBITMQ_PASSWORD"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:password::"
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_groups["analytics-service"]
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "analytics-service"
+        }
+      }
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "nc -z localhost 8086 || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 120
+      }
+    }
+  ])
+
+  tags = var.tags
+}
