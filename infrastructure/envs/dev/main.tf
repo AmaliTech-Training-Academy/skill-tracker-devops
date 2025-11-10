@@ -335,16 +335,14 @@ module "amplify" {
   platform               = "WEB"
   build_output_directory = "dist/SkillBoost/browser"
 
-  # Custom build spec with SPA redirect - force npm install over npm ci
+  # Custom build spec with SPA redirect
   build_spec = <<-EOT
     version: 1
     frontend:
       phases:
         preBuild:
           commands:
-            - echo "Forcing npm install instead of npm ci"
-            - rm -f package-lock.json
-            - npm install
+            - npm ci
             - echo "Creating .env file with environment variables"
             - echo "NG_APP_URL=$NG_APP_URL" > .env
             - cat .env
