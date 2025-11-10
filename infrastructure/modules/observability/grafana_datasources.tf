@@ -1,9 +1,7 @@
-# Prometheus datasource (already provisioned via user-data, but managed here for completeness)
-resource "grafana_data_source" "prometheus" {
-  type       = "prometheus"
-  name       = "Prometheus"
-  url        = "http://prometheus:9090"
-  is_default = true
+# Prometheus datasource (already provisioned via user-data)
+# Using data source to reference existing datasource instead of creating new one
+data "grafana_data_source" "prometheus" {
+  name = "Prometheus"
 
   depends_on = [aws_instance.monitoring]
 }

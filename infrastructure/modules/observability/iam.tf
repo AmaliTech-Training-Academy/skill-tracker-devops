@@ -29,22 +29,37 @@ resource "aws_iam_role_policy" "monitoring_cloudwatch" {
       {
         Effect = "Allow"
         Action = [
+          # CloudWatch Metrics
           "cloudwatch:DescribeAlarms",
           "cloudwatch:GetMetricData",
           "cloudwatch:GetMetricStatistics",
           "cloudwatch:ListMetrics",
+          # CloudWatch Logs
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:GetLogEvents",
+          "logs:FilterLogEvents",
+          "logs:GetQueryResults",
+          "logs:StartQuery",
+          "logs:StopQuery",
+          # EC2
           "ec2:DescribeInstances",
           "ec2:DescribeRegions",
           "ec2:DescribeTags",
+          # ECS
           "ecs:DescribeClusters",
           "ecs:DescribeServices",
           "ecs:DescribeTasks",
           "ecs:ListClusters",
           "ecs:ListServices",
           "ecs:ListTasks",
+          # RDS
           "rds:DescribeDBInstances",
+          # ALB
           "elasticloadbalancing:DescribeLoadBalancers",
-          "elasticloadbalancing:DescribeTargetGroups"
+          "elasticloadbalancing:DescribeTargetGroups",
+          # Resource Groups (for tag-based queries)
+          "tag:GetResources"
         ]
         Resource = "*"
       }

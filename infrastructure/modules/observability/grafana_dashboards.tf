@@ -2,11 +2,23 @@
 resource "grafana_dashboard" "service_overview" {
   config_json = file("${path.module}/dashboards/sdt-service-overview.json")
 
-  depends_on = [grafana_data_source.prometheus]
+  depends_on = [data.grafana_data_source.prometheus]
 }
 
 # CloudWatch-based Infrastructure Dashboard
 resource "grafana_dashboard" "infrastructure" {
+  config_json = replace(
+    file("${path.module}/dashboards/sdt-infrastructure.json"),
+    "$${CLOUDWATCH_UID}",
+    grafana_data_source.cloudwatch.uid
+  )
+
+  depends_on = [grafana_data_source.cloudwatch]
+}
+
+# OLD VERSION - keeping for reference, delete after testing
+resource "grafana_dashboard" "infrastructure_old" {
+  count = 0
   config_json = jsonencode({
     title         = "SDT - Infrastructure Overview"
     uid           = "sdt-infrastructure"
@@ -54,9 +66,9 @@ resource "grafana_dashboard" "infrastructure" {
         }
       },
 
-      # ECS Cluster Memory Utilization
+      # ECS Services Memory Utilization
       {
-        title   = "ECS Cluster Memory Utilization"
+        title   = "ECS Services Memory Utilization"
         type    = "timeseries"
         gridPos = { x = 12, y = 0, w = 12, h = 8 }
         datasource = {
@@ -69,6 +81,7 @@ resource "grafana_dashboard" "infrastructure" {
             namespace  = "AWS/ECS"
             metricName = "MemoryUtilization"
             dimensions = {
+              ServiceName = "*"
               ClusterName = "${var.project_name}-${var.environment}-cluster"
             }
             statistic = "Average"
@@ -106,7 +119,7 @@ resource "grafana_dashboard" "infrastructure" {
             namespace  = "AWS/RDS"
             metricName = "CPUUtilization"
             dimensions = {
-              DBInstanceIdentifier = "${var.project_name}-${var.environment}-db"
+              DBInstanceIdentifier = "${var.project_name}-${var.environment}-postgres"
             }
             statistic = "Average"
             period    = 300
@@ -143,7 +156,7 @@ resource "grafana_dashboard" "infrastructure" {
             namespace  = "AWS/RDS"
             metricName = "DatabaseConnections"
             dimensions = {
-              DBInstanceIdentifier = "${var.project_name}-${var.environment}-db"
+              DBInstanceIdentifier = "${var.project_name}-${var.environment}-postgres"
             }
             statistic = "Average"
             period    = 300
@@ -180,7 +193,7 @@ resource "grafana_dashboard" "infrastructure" {
             namespace  = "AWS/RDS"
             metricName = "FreeStorageSpace"
             dimensions = {
-              DBInstanceIdentifier = "${var.project_name}-${var.environment}-db"
+              DBInstanceIdentifier = "${var.project_name}-${var.environment}-postgres"
             }
             statistic = "Average"
             period    = 300
@@ -217,7 +230,7 @@ resource "grafana_dashboard" "infrastructure" {
             namespace  = "AWS/ApplicationELB"
             metricName = "RequestCount"
             dimensions = {
-              LoadBalancer = "app/${var.project_name}-${var.environment}-alb/*"
+              LoadBalancer = "app/${var.project_name}-${var.environment}-alb/2874514f99ee3911"
             }
             statistic = "Sum"
             period    = 300
@@ -246,7 +259,7 @@ resource "grafana_dashboard" "infrastructure" {
             namespace  = "AWS/ApplicationELB"
             metricName = "TargetResponseTime"
             dimensions = {
-              LoadBalancer = "app/${var.project_name}-${var.environment}-alb/*"
+              LoadBalancer = "app/${var.project_name}-${var.environment}-alb/2874514f99ee3911"
             }
             statistic = "Average"
             period    = 300
@@ -283,7 +296,7 @@ resource "grafana_dashboard" "infrastructure" {
             namespace  = "AWS/ApplicationELB"
             metricName = "HTTPCode_Target_5XX_Count"
             dimensions = {
-              LoadBalancer = "app/${var.project_name}-${var.environment}-alb/*"
+              LoadBalancer = "app/${var.project_name}-${var.environment}-alb/2874514f99ee3911"
             }
             statistic = "Sum"
             period    = 300
@@ -364,6 +377,18 @@ resource "grafana_dashboard" "infrastructure" {
 
 # Cost Monitoring Dashboard
 resource "grafana_dashboard" "cost_monitoring" {
+  config_json = replace(
+    file("${path.module}/dashboards/sdt-cost-monitoring.json"),
+    "$${CLOUDWATCH_UID}",
+    grafana_data_source.cloudwatch.uid
+  )
+
+  depends_on = [grafana_data_source.cloudwatch]
+}
+
+# OLD VERSION - keeping for reference, delete after testing
+resource "grafana_dashboard" "cost_monitoring_old" {
+  count = 0
   config_json = jsonencode({
     title         = "SDT - Cost Monitoring"
     uid           = "sdt-cost-monitoring"
