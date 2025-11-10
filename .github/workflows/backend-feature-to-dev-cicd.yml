@@ -415,8 +415,8 @@ jobs:
             CURRENT_IMAGE=$(echo "$WORKING_TASK_DEF" | jq -r '.containerDefinitions[0].image')
             echo "Current working image: $CURRENT_IMAGE"
 
-            # Create new task definition with ONLY image change
-            NEW_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${SERVICE_NAME}:${{ inputs.commit_sha }}"
+            # Create new task definition with ONLY image change - USE :latest TAG
+            NEW_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${SERVICE_NAME}:latest"
             NEW_TASK_DEF=$(echo "$WORKING_TASK_DEF" | jq \
               --arg NEW_IMAGE "$NEW_IMAGE" '
                 # Update only the image
@@ -544,7 +544,7 @@ jobs:
         id: minimal-update
         run: |
           SERVICE_NAME="${{ matrix.service.name }}"
-          NEW_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/$SERVICE_NAME:${{ inputs.commit_sha }}"
+          NEW_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/$SERVICE_NAME:latest"
 
           # Read the working task definition
           WORKING_TASK_DEF=$(cat current-taskdef.json)
