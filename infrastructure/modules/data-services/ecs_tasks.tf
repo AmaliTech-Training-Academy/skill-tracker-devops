@@ -41,14 +41,6 @@ resource "aws_ecs_task_definition" "mongodb" {
 
       command = ["--auth"]
 
-      mountPoints = [
-        {
-          sourceVolume  = "mongodb-data"
-          containerPath = "/data/db"
-          readOnly      = false
-        }
-      ]
-
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -68,20 +60,6 @@ resource "aws_ecs_task_definition" "mongodb" {
     }
   ])
 
-  volume {
-    name = "mongodb-data"
-
-    efs_volume_configuration {
-      file_system_id     = var.efs_file_system_id
-      transit_encryption = "ENABLED"
-      
-      authorization_config {
-        access_point_id = var.mongodb_access_point_id
-        iam             = "ENABLED"
-      }
-    }
-  }
-
   tags = merge(
     var.tags,
     {
@@ -95,7 +73,7 @@ resource "aws_ecs_service" "mongodb" {
   name            = "${var.project_name}-${var.environment}-mongodb"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.mongodb.arn
-  desired_count   = 0  # Disabled - not used by any deployed services
+  desired_count   = 1  # Enabled for analytics-service
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -223,6 +201,8 @@ resource "aws_ecs_task_definition" "rabbitmq" {
         }
       ]
 
+      user = "999:999"
+
       secrets = [
         {
           name      = "RABBITMQ_DEFAULT_USER"
@@ -231,14 +211,10 @@ resource "aws_ecs_task_definition" "rabbitmq" {
         {
           name      = "RABBITMQ_DEFAULT_PASS"
           valueFrom = "${aws_secretsmanager_secret.rabbitmq.arn}:password::"
-        }
-      ]
-
-      mountPoints = [
+        },
         {
-          sourceVolume  = "rabbitmq-data"
-          containerPath = "/var/lib/rabbitmq"
-          readOnly      = false
+          name      = "RABBITMQ_ERLANG_COOKIE"
+          valueFrom = "${aws_secretsmanager_secret.rabbitmq.arn}:erlang_cookie::"
         }
       ]
 
@@ -261,20 +237,6 @@ resource "aws_ecs_task_definition" "rabbitmq" {
     }
   ])
 
-  volume {
-    name = "rabbitmq-data"
-
-    efs_volume_configuration {
-      file_system_id     = var.efs_file_system_id
-      transit_encryption = "ENABLED"
-      
-      authorization_config {
-        access_point_id = var.rabbitmq_access_point_id
-        iam             = "ENABLED"
-      }
-    }
-  }
-
   tags = merge(
     var.tags,
     {
@@ -288,7 +250,7 @@ resource "aws_ecs_service" "rabbitmq" {
   name            = "${var.project_name}-${var.environment}-rabbitmq"
   cluster         = var.ecs_cluster_id
   task_definition = aws_ecs_task_definition.rabbitmq.arn
-  desired_count   = 0  # Disabled - only needed when microservices with event messaging are deployed
+  desired_count   = 1  # Enabled for analytics-service
   launch_type     = "FARGATE"
 
   network_configuration {

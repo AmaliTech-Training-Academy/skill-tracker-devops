@@ -192,3 +192,42 @@ resource "aws_service_discovery_service" "task_service" {
     }
   }
 }
+
+
+# Analytics Service (starts after config server)
+resource "aws_ecs_service" "analytics_service" {
+  name            = "${var.project_name}-${var.environment}-analytics-service"
+  cluster         = var.ecs_cluster_id
+  task_definition = aws_ecs_task_definition.analytics_service.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [var.ecs_security_group_id]
+    assign_public_ip = false
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.analytics_service.arn
+  }
+
+  depends_on = [aws_ecs_service.config_server]
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-${var.environment}-analytics-service-service"
+  })
+}
+
+resource "aws_service_discovery_service" "analytics_service" {
+  name = "analytics-service"
+
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+    
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+  }
+}
