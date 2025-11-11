@@ -205,6 +205,8 @@ resource "aws_ecs_task_definition" "rabbitmq" {
         }
       ]
 
+      user = "999:999"
+
       secrets = [
         {
           name      = "RABBITMQ_DEFAULT_USER"
