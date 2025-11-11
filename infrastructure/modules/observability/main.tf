@@ -66,6 +66,7 @@ resource "aws_instance" "monitoring" {
   vpc_security_group_ids      = [aws_security_group.monitoring.id]
   associate_public_ip_address = true
   iam_instance_profile        = aws_iam_instance_profile.monitoring.name
+  key_name                    = var.key_name
 
   user_data = templatefile("${path.module}/user-data.sh", {
     region                      = var.aws_region

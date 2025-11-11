@@ -229,9 +229,10 @@ module "observability" {
   service_discovery_namespace = "${local.environment}.${local.project_name}.local"
   adot_exporter_port          = 8889
   grafana_admin_password      = "admin"
+  key_name                    = "debug-pair"
 
   # Restrict as needed
-  ssh_allowed_cidrs = []
+  ssh_allowed_cidrs = ["0.0.0.0/0"] # Allow SSH from anywhere (restrict in production)
   web_allowed_cidrs = ["0.0.0.0/0"]
 
   tags = local.common_tags
