@@ -74,3 +74,13 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "alb_listener_arn" {
+  description = "ARN of the ALB HTTP listener"
+  type        = string
+}
+
+variable "alb_security_group_id" {
+  description = "Security group ID of the ALB"
+  type        = string
+}

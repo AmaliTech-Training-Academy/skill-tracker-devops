@@ -273,6 +273,9 @@ module "data_services" {
   aws_region         = var.aws_region
   log_retention_days = 30
 
+  alb_listener_arn       = module.ecs.alb_listener_arn
+  alb_security_group_id  = module.ecs.alb_security_group_id
+
   tags = local.common_tags
 
   depends_on = [module.efs]
