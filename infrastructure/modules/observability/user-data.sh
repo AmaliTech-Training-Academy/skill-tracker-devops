@@ -39,6 +39,7 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
+  # Infrastructure Services
   - job_name: 'discovery-server'
     static_configs:
       - targets: ['discovery-server.$${NAMESPACE}:$${EXPORTER_PORT}']
@@ -48,12 +49,35 @@ scrape_configs:
   - job_name: 'api-gateway'
     static_configs:
       - targets: ['api-gateway.$${NAMESPACE}:$${EXPORTER_PORT}']
+  
+  # Business Services
+  - job_name: 'bff-service'
+    static_configs:
+      - targets: ['bff-service.$${NAMESPACE}:$${EXPORTER_PORT}']
   - job_name: 'user-service'
     static_configs:
       - targets: ['user-service.$${NAMESPACE}:$${EXPORTER_PORT}']
   - job_name: 'task-service'
     static_configs:
       - targets: ['task-service.$${NAMESPACE}:$${EXPORTER_PORT}']
+  - job_name: 'analytics-service'
+    static_configs:
+      - targets: ['analytics-service.$${NAMESPACE}:$${EXPORTER_PORT}']
+  - job_name: 'payment-service'
+    static_configs:
+      - targets: ['payment-service.$${NAMESPACE}:$${EXPORTER_PORT}']
+  - job_name: 'gamification-service'
+    static_configs:
+      - targets: ['gamification-service.$${NAMESPACE}:$${EXPORTER_PORT}']
+  - job_name: 'practice-service'
+    static_configs:
+      - targets: ['practice-service.$${NAMESPACE}:$${EXPORTER_PORT}']
+  - job_name: 'feedback-service'
+    static_configs:
+      - targets: ['feedback-service.$${NAMESPACE}:$${EXPORTER_PORT}']
+  - job_name: 'notification-service'
+    static_configs:
+      - targets: ['notification-service.$${NAMESPACE}:$${EXPORTER_PORT}']
 EOF
 
 # Grafana datasource provisioning (Prometheus)

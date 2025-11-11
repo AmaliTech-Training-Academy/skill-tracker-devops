@@ -59,6 +59,12 @@ variable "web_allowed_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "key_name" {
+  description = "EC2 key pair name for SSH access"
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags to apply"
   type        = map(string)
