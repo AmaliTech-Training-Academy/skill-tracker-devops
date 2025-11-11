@@ -644,6 +644,14 @@ resource "aws_ecs_task_definition" "task_service" {
         {
           name  = "OPENAI_API_KEY"
           value = "dummy-key-for-now"
+        },
+        {
+          name  = "SPRING_RABBITMQ_HOST"
+          value = "rabbitmq.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "SPRING_RABBITMQ_PORT"
+          value = "5672"
         }
       ]
 
@@ -655,6 +663,14 @@ resource "aws_ecs_task_definition" "task_service" {
         {
           name      = "POSTGRES_PASSWORD"
           valueFrom = "${var.rds_secret_arn}:password::"
+        },
+        {
+          name      = "RABBITMQ_USER"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:username::"
+        },
+        {
+          name      = "RABBITMQ_PASSWORD"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:password::"
         }
       ]
 
@@ -809,12 +825,20 @@ resource "aws_ecs_task_definition" "analytics_service" {
           value = "analytics_db"
         },
         {
+          name  = "SPRING_RABBITMQ_HOST"
+          value = "rabbitmq.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "SPRING_RABBITMQ_PORT"
+          value = "5672"
+        },
+        {
           name  = "RABBITMQ_HOST"
           value = "rabbitmq.${var.service_discovery_namespace}"
         },
         {
-          name  = "RABBITMQ_PORT"
-          value = "5672"
+          name  = "RABBITMQ_STOMP_PORT"
+          value = "61613"
         }
       ]
 
@@ -905,6 +929,307 @@ receivers:
           metrics_path: /actuator/prometheus
           static_configs:
             - targets: ['localhost:8086']
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:${var.adot_exporter_port}
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [prometheus]
+EOT
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_groups["cluster"]
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "adot"
+        }
+      }
+    }
+  ] : []))
+
+  tags = var.tags
+}
+
+
+# Feedback Service Task Definition
+resource "aws_ecs_task_definition" "feedback_service" {
+  family                   = "${var.project_name}-${var.environment}-feedback-service"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "512"
+  memory                   = "1024"
+  execution_role_arn       = var.ecs_task_execution_role_arn
+  task_role_arn           = var.ecs_task_role_arn
+
+  container_definitions = jsonencode(concat([{
+    name      = "feedback-service"
+    image     = "${var.ecr_repository_urls["feedback-service"]}:latest"
+    essential = true
+    
+    portMappings = [{
+      containerPort = 8090
+      protocol      = "tcp"
+    }]
+
+    environment = [
+      {
+        name  = "CONFIG_HOST"
+        value = "config-server.${var.service_discovery_namespace}"
+      },
+      {
+        name  = "CONFIG_PORT"
+        value = "8081"
+      },
+      {
+        name  = "DISCOVERY_HOST"
+        value = "discovery-server.${var.service_discovery_namespace}"
+      },
+      {
+        name  = "DISCOVERY_PORT"
+        value = "8082"
+      },
+      {
+        name  = "SERVER_PORT"
+        value = "8090"
+      },
+      {
+        name  = "SPRING_PROFILES_ACTIVE"
+        value = "dev"
+      },
+      {
+        name  = "EUREKA_INSTANCE_PREFER_IP_ADDRESS"
+        value = "false"
+      },
+      {
+        name  = "EUREKA_INSTANCE_HOSTNAME"
+        value = "feedback-service.${var.service_discovery_namespace}"
+      },
+      {
+        name  = "POSTGRES_HOST"
+        value = split(":", var.rds_endpoint)[0]
+      },
+      {
+        name  = "POSTGRES_DB"
+        value = var.rds_db_name
+      },
+      {
+        name  = "SPRING_JPA_HIBERNATE_DDL_AUTO"
+        value = "update"
+      },
+      {
+        name  = "OPENAI_API_KEY"
+        value = "dummy-key-for-now"
+      },
+      {
+        name  = "SPRING_RABBITMQ_HOST"
+        value = "rabbitmq.${var.service_discovery_namespace}"
+      },
+      {
+        name  = "SPRING_RABBITMQ_PORT"
+        value = "5672"
+      }
+    ]
+
+    secrets = [
+      {
+        name      = "POSTGRES_USER"
+        valueFrom = "${var.rds_secret_arn}:username::"
+      },
+      {
+        name      = "POSTGRES_PASSWORD"
+        valueFrom = "${var.rds_secret_arn}:password::"
+      },
+      {
+        name      = "RABBITMQ_USER"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:username::"
+      },
+      {
+        name      = "RABBITMQ_PASSWORD"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:password::"
+      }
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = var.log_groups["feedback-service"]
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "feedback-service"
+      }
+    }
+
+    healthCheck = {
+      command     = ["CMD-SHELL", "nc -z localhost 8090 || exit 1"]
+      interval    = 30
+      timeout     = 5
+      retries     = 3
+      startPeriod = 120
+    }
+  }], var.enable_adot_sidecar ? [
+    {
+      name      = "adot-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+      portMappings = [
+        {
+          containerPort = var.adot_exporter_port
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
+        { name = "AOT_CONFIG_CONTENT", value = <<-EOT
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'spring-feedback'
+          metrics_path: /actuator/prometheus
+          static_configs:
+            - targets: ['localhost:8090']
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:${var.adot_exporter_port}
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [prometheus]
+EOT
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_groups["cluster"]
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "adot"
+        }
+      }
+    }
+  ] : []))
+
+  tags = var.tags
+}
+
+# Notification Service Task Definition
+resource "aws_ecs_task_definition" "notification_service" {
+  family                   = "${var.project_name}-${var.environment}-notification-service"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "512"
+  memory                   = "1024"
+  execution_role_arn       = var.ecs_task_execution_role_arn
+  task_role_arn           = var.ecs_task_role_arn
+
+  container_definitions = jsonencode(concat([{
+    name      = "notification-service"
+    image     = "${var.ecr_repository_urls["notification-service"]}:latest"
+    essential = true
+    
+    portMappings = [{
+      containerPort = 8091
+      protocol      = "tcp"
+    }]
+
+    environment = [
+      {
+        name  = "CONFIG_HOST"
+        value = "config-server.${var.service_discovery_namespace}"
+      },
+      {
+        name  = "CONFIG_PORT"
+        value = "8081"
+      },
+      {
+        name  = "DISCOVERY_HOST"
+        value = "discovery-server.${var.service_discovery_namespace}"
+      },
+      {
+        name  = "DISCOVERY_PORT"
+        value = "8082"
+      },
+      {
+        name  = "SERVER_PORT"
+        value = "8091"
+      },
+      {
+        name  = "SPRING_PROFILES_ACTIVE"
+        value = "dev"
+      },
+      {
+        name  = "EUREKA_INSTANCE_PREFER_IP_ADDRESS"
+        value = "false"
+      },
+      {
+        name  = "EUREKA_INSTANCE_HOSTNAME"
+        value = "notification-service.${var.service_discovery_namespace}"
+      },
+      {
+        name  = "SPRING_RABBITMQ_HOST"
+        value = "rabbitmq.${var.service_discovery_namespace}"
+      },
+      {
+        name  = "SPRING_RABBITMQ_PORT"
+        value = "5672"
+      }
+    ]
+
+    secrets = [
+      {
+        name      = "RABBITMQ_USER"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:username::"
+      },
+      {
+        name      = "RABBITMQ_PASSWORD"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:password::"
+      }
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = var.log_groups["notification-service"]
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "notification-service"
+      }
+    }
+
+    healthCheck = {
+      command     = ["CMD-SHELL", "nc -z localhost 8091 || exit 1"]
+      interval    = 30
+      timeout     = 5
+      retries     = 3
+      startPeriod = 120
+    }
+  }], var.enable_adot_sidecar ? [
+    {
+      name      = "adot-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+      portMappings = [
+        {
+          containerPort = var.adot_exporter_port
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "AWS_OTEL_LOG_LEVEL", value = "INFO" },
+        { name = "AOT_CONFIG_CONTENT", value = <<-EOT
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'spring-notification'
+          metrics_path: /actuator/prometheus
+          static_configs:
+            - targets: ['localhost:8091']
 exporters:
   prometheus:
     endpoint: 0.0.0.0:${var.adot_exporter_port}

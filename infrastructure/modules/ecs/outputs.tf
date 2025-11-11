@@ -38,6 +38,11 @@ output "target_group_arn" {
   value       = var.create_alb ? aws_lb_target_group.main[0].arn : null
 }
 
+output "alb_listener_arn" {
+  description = "ARN of the ALB HTTP listener"
+  value       = var.create_alb ? aws_lb_listener.http[0].arn : null
+}
+
 # ECR Repository URLs
 output "ecr_repository_urls" {
   description = "Map of ECR repository URLs for all services"

@@ -198,10 +198,21 @@ resource "aws_ecs_task_definition" "rabbitmq" {
         {
           containerPort = 15672
           protocol      = "tcp"
+        },
+        {
+          containerPort = 61613
+          protocol      = "tcp"
         }
       ]
 
       user = "999:999"
+
+      environment = [
+        {
+          name  = "HOME"
+          value = "/tmp"
+        }
+      ]
 
       secrets = [
         {
@@ -255,7 +266,13 @@ resource "aws_ecs_service" "rabbitmq" {
 
   network_configuration {
     subnets         = var.private_subnet_ids
-    security_groups = [aws_security_group.data_services.id]
+    security_groups = [aws_security_group.data_services.id, var.alb_security_group_id]
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.rabbitmq_mgmt.arn
+    container_name   = "rabbitmq"
+    container_port   = 15672
   }
 
   enable_execute_command = true

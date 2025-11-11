@@ -40,6 +40,15 @@ resource "aws_security_group" "data_services" {
     security_groups = [var.ecs_security_group_id]
   }
 
+  # RabbitMQ Management UI from ALB
+  ingress {
+    description     = "RabbitMQ Management from ALB"
+    from_port       = 15672
+    to_port         = 15672
+    protocol        = "tcp"
+    security_groups = [var.alb_security_group_id]
+  }
+
   egress {
     description = "Allow all outbound"
     from_port   = 0
