@@ -403,16 +403,8 @@ resource "aws_ecs_task_definition" "user_service" {
           value = "https://dev.dy006p1vkpl2e.amplifyapp.com"
         },
         {
-          name  = "GOOGLE_CLIENT_ID"
-          value = "71818883519-qruu2n5l2qtb75t2s50gbulj5qj5uuap.apps.googleusercontent.com"
-        },
-        {
-          name  = "GOOGLE_CLIENT_SECRET"
-          value = "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"
-        },
-        {
           name  = "GOOGLE_REDIRECT_URI"
-          value = "https://lmmqcw9520.execute-api.eu-west-1.amazonaws.com/dev/login/oauth2/code/google"
+          value = "https://lmmqcw9520.execute-api.eu-west-1.amazonaws.com/dev/login/oauth2/code/{registrationId}"
         },
         {
           name  = "GOOGLE_AUTHORIZATION_URI"
@@ -425,14 +417,6 @@ resource "aws_ecs_task_definition" "user_service" {
         {
           name  = "GOOGLE_USER_INFO_URI"
           value = "https://www.googleapis.com/oauth2/v3/userinfo"
-        },
-        {
-          name  = "GITHUB_CLIENT_ID"
-          value = "github-client-id"
-        },
-        {
-          name  = "GITHUB_CLIENT_SECRET"
-          value = "github-client-secret"
         },
         {
           name  = "GITHUB_AUTHORIZATION_URI"
@@ -504,6 +488,22 @@ resource "aws_ecs_task_definition" "user_service" {
         {
           name      = "RESET_TOKEN_EXPIRATION"
           valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:${var.project_name}-${var.environment}-app-secrets-jwt:RESET_TOKEN_EXPIRATION::"
+        },
+        {
+          name      = "GOOGLE_CLIENT_ID"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-app-secrets-oauth-google-vZ0PBA:GOOGLE_CLIENT_ID::"
+        },
+        {
+          name      = "GOOGLE_CLIENT_SECRET"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-app-secrets-oauth-google-vZ0PBA:GOOGLE_CLIENT_SECRET::"
+        },
+        {
+          name      = "GITHUB_CLIENT_ID"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-app-secrets-oauth-github-7gDyXh:GITHUB_CLIENT_ID::"
+        },
+        {
+          name      = "GITHUB_CLIENT_SECRET"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-app-secrets-oauth-github-7gDyXh:GITHUB_CLIENT_SECRET::"
         }
       ]
 
