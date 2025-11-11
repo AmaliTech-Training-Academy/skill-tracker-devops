@@ -207,6 +207,13 @@ resource "aws_ecs_task_definition" "rabbitmq" {
 
       user = "999:999"
 
+      environment = [
+        {
+          name  = "HOME"
+          value = "/tmp"
+        }
+      ]
+
       secrets = [
         {
           name      = "RABBITMQ_DEFAULT_USER"
