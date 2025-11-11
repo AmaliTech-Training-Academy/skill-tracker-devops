@@ -151,14 +151,21 @@ jobs:
           fi
 
           COMMIT="${{ inputs.commit_sha }}"
-          PARENT="${COMMIT}^1"
-          # Fallback if parent is missing (e.g., not a merge commit)
-          if ! git cat-file -e "$PARENT" 2>/dev/null; then
-            PARENT="${COMMIT}^"
-          fi
-
-          echo "Comparing $PARENT..$COMMIT"
-          CHANGED=$(git diff --name-only "$PARENT" "$COMMIT" || true)
+          TARGET_BRANCH="${{ inputs.target_branch }}"
+          
+          echo "🔍 Detecting changes for commit: $COMMIT"
+          echo "🎯 Target branch: $TARGET_BRANCH"
+          
+          # Fetch target branch for comparison
+          git fetch origin "$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH" || true
+          
+          # Use merge-base to find common ancestor, then compare
+          BASE=$(git merge-base "origin/$TARGET_BRANCH" "$COMMIT" 2>/dev/null || echo "origin/$TARGET_BRANCH")
+          
+          echo "📊 Comparing $BASE..$COMMIT"
+          CHANGED=$(git diff --name-only "$BASE" "$COMMIT" || true)
+          
+          echo "📝 Changed files:"
           printf '%s\n' "$CHANGED"
 
           SERVICES_JSON='[]'
@@ -195,6 +202,16 @@ jobs:
           
           echo "infra_any=$INFRA_ANY" >> "$GITHUB_OUTPUT"
           echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
+          
+          # Summary
+          echo ""
+          echo "✅ Change Detection Summary:"
+          echo "   Total services changed: $(echo "$SERVICES_JSON" | jq 'length')"
+          echo "   Business services changed: $(echo "$BUSINESS_JSON" | jq 'length')"
+          echo "   Infrastructure services changed: $INFRA_ANY"
+          if [ "$SERVICES_JSON" = "[]" ]; then
+            echo "   ⚠️ No service changes detected - deployments will be skipped"
+          fi
 
       - name: Debug changed services outputs
         run: |
@@ -491,7 +508,7 @@ jobs:
     name: Deploy Business Services (Image-Only Updates)
     runs-on: ubuntu-latest
     needs: [build-and-push, deploy-infra, detect-changes]
-    if: inputs.enable_ecs_deploy && always() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
+    if: inputs.enable_ecs_deploy && needs.detect-changes.outputs.business_services_json != '[]' && always() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
 
     strategy:
       matrix:
