@@ -94,3 +94,9 @@ variable "custom_domain_name" {
   type        = string
   default     = ""
 }
+
+variable "google_api_key" {
+  description = "Google API key for MCQ generation"
+  type        = string
+  sensitive   = true
+}

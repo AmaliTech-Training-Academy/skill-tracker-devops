@@ -662,10 +662,6 @@ resource "aws_ecs_task_definition" "task_service" {
           value = "update"
         },
         {
-          name  = "OPENAI_API_KEY"
-          value = "dummy-key-for-now"
-        },
-        {
           name  = "SPRING_RABBITMQ_HOST"
           value = "rabbitmq.${var.service_discovery_namespace}"
         },
@@ -691,6 +687,10 @@ resource "aws_ecs_task_definition" "task_service" {
         {
           name      = "RABBITMQ_PASSWORD"
           valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:password::"
+        },
+        {
+          name      = "OPENAI_API_KEY"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-google-api-key-9hinUM:OPENAI_API_KEY::"
         }
       ]
 
