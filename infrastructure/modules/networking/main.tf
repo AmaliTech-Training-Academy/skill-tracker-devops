@@ -59,7 +59,7 @@ resource "aws_subnet" "private" {
 
 # Elastic IPs for NAT Gateways
 resource "aws_eip" "nat" {
-  count  = var.enable_nat_gateway ? length(var.public_subnet_cidrs) : 0
+  count  = var.enable_nat_gateway ? 1 : 0
   domain = "vpc"
 
   tags = merge(
@@ -74,7 +74,7 @@ resource "aws_eip" "nat" {
 
 # NAT Gateways
 resource "aws_nat_gateway" "main" {
-  count         = var.enable_nat_gateway ? length(var.public_subnet_cidrs) : 0
+  count         = var.enable_nat_gateway ? 1 : 0
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
 
@@ -114,21 +114,21 @@ resource "aws_route_table_association" "public" {
 
 # Private Route Tables
 resource "aws_route_table" "private" {
-  count  = var.enable_nat_gateway ? length(var.private_subnet_cidrs) : 1
+  count  = 1
   vpc_id = aws_vpc.main.id
 
   dynamic "route" {
     for_each = var.enable_nat_gateway ? [1] : []
     content {
       cidr_block     = "0.0.0.0/0"
-      nat_gateway_id = aws_nat_gateway.main[count.index].id
+      nat_gateway_id = aws_nat_gateway.main[0].id
     }
   }
 
   tags = merge(
     var.tags,
     {
-      Name = "${var.project_name}-${var.environment}-private-rt-${count.index + 1}"
+      Name = "${var.project_name}-${var.environment}-private-rt"
     }
   )
 }
@@ -137,7 +137,7 @@ resource "aws_route_table" "private" {
 resource "aws_route_table_association" "private" {
   count          = length(var.private_subnet_cidrs)
   subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = var.enable_nat_gateway ? aws_route_table.private[count.index].id : aws_route_table.private[0].id
+  route_table_id = aws_route_table.private[0].id
 }
 
 # VPC Flow Logs (optional but recommended)

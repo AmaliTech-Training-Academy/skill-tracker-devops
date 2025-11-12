@@ -49,3 +49,19 @@ resource "aws_secretsmanager_secret_version" "rabbitmq" {
     management_port = 15672
   })
 }
+
+# Secrets Manager Secret for Google API Key (used for MCQ generation)
+resource "aws_secretsmanager_secret" "google_api_key" {
+  name                    = "${var.project_name}-${var.environment}-google-api-key"
+  description             = "Google API key for MCQ generation in ${var.environment}"
+  recovery_window_in_days = var.environment == "production" ? 30 : 0
+
+  tags = var.tags
+}
+
+resource "aws_secretsmanager_secret_version" "google_api_key" {
+  secret_id = aws_secretsmanager_secret.google_api_key.id
+  secret_string = jsonencode({
+    OPENAI_API_KEY = var.google_api_key
+  })
+}
