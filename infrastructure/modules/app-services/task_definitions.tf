@@ -441,6 +441,18 @@ resource "aws_ecs_task_definition" "user_service" {
         {
           name  = "GITHUB_CLIENT_AUTHENTICATION_METHOD"
           value = "client_secret_post"
+        },
+        {
+          name  = "SPRING_RABBITMQ_HOST"
+          value = "rabbitmq.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "SPRING_RABBITMQ_PORT"
+          value = "5672"
+        },
+        {
+          name  = "LOGIN_URL"
+          value = "https://dev.dy006p1vkpl2e.amplifyapp.com/login"
         }
       ]
 
@@ -504,6 +516,14 @@ resource "aws_ecs_task_definition" "user_service" {
         {
           name      = "GITHUB_CLIENT_SECRET"
           valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-app-secrets-oauth-github-7gDyXh:GITHUB_CLIENT_SECRET::"
+        },
+        {
+          name      = "RABBITMQ_USER"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:username::"
+        },
+        {
+          name      = "RABBITMQ_PASSWORD"
+          valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:password::"
         }
       ]
 
