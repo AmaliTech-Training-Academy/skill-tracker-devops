@@ -64,3 +64,45 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# New variables for S3 log export
+variable "enable_log_export_to_s3" {
+  description = "Enable automatic export of CloudWatch logs to S3"
+  type        = bool
+  default     = false
+}
+
+variable "app_logs_bucket_id" {
+  description = "S3 bucket ID for application logs"
+  type        = string
+  default     = ""
+}
+
+variable "app_logs_bucket_arn" {
+  description = "S3 bucket ARN for application logs"
+  type        = string
+  default     = ""
+}
+
+variable "service_names" {
+  description = "List of service names for log export"
+  type        = list(string)
+  default     = [
+    "config-server",
+    "discovery-server", 
+    "api-gateway",
+    "bff-service",
+    "user-service",
+    "task-service",
+    "analytics-service",
+    "payment-service",
+    "gamification-service",
+    "practice-service",
+    "feedback-service",
+    "notification-service",
+    "mongodb",
+    "redis",
+    "rabbitmq"
+  ]
+}
+
