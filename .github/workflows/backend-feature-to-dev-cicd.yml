@@ -128,6 +128,13 @@ jobs:
             skilltracker-services/practice-service
             skilltracker-services/task-service
             skilltracker-services/user-service
+            skilltracker-services/task-service
+            skilltracker-services/analytics-service
+            skilltracker-services/payment-service
+            skilltracker-services/gamification-service
+            skilltracker-services/practice-service
+            skilltracker-services/feedback-service
+            skilltracker-services/notification-service
           )
           PORTS=(8081 8082 8080 8086 8083 8090 8088 8091 8087 8089 8085 8084)
 
@@ -160,21 +167,14 @@ jobs:
           fi
 
           COMMIT="${{ inputs.commit_sha }}"
-          TARGET_BRANCH="${{ inputs.target_branch }}"
-          
-          echo "🔍 Detecting changes for commit: $COMMIT"
-          echo "🎯 Target branch: $TARGET_BRANCH"
-          
-          # Fetch target branch for comparison
-          git fetch origin "$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH" || true
-          
-          # Use merge-base to find common ancestor, then compare
-          BASE=$(git merge-base "origin/$TARGET_BRANCH" "$COMMIT" 2>/dev/null || echo "origin/$TARGET_BRANCH")
-          
-          echo "📊 Comparing $BASE..$COMMIT"
-          CHANGED=$(git diff --name-only "$BASE" "$COMMIT" || true)
-          
-          echo "📝 Changed files:"
+          PARENT="${COMMIT}^1"
+          # Fallback if parent is missing (e.g., not a merge commit)
+          if ! git cat-file -e "$PARENT" 2>/dev/null; then
+            PARENT="${COMMIT}^"
+          fi
+
+          echo "Comparing $PARENT..$COMMIT"
+          CHANGED=$(git diff --name-only "$PARENT" "$COMMIT" || true)
           printf '%s\n' "$CHANGED"
 
           SERVICES_JSON='[]'
@@ -211,16 +211,6 @@ jobs:
           
           echo "infra_any=$INFRA_ANY" >> "$GITHUB_OUTPUT"
           echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
-          
-          # Summary
-          echo ""
-          echo "✅ Change Detection Summary:"
-          echo "   Total services changed: $(echo "$SERVICES_JSON" | jq 'length')"
-          echo "   Business services changed: $(echo "$BUSINESS_JSON" | jq 'length')"
-          echo "   Infrastructure services changed: $INFRA_ANY"
-          if [ "$SERVICES_JSON" = "[]" ]; then
-            echo "   ⚠️ No service changes detected - deployments will be skipped"
-          fi
 
       - name: Debug changed services outputs
         run: |
@@ -697,7 +687,15 @@ jobs:
             "config-server"
             "discovery-server"
             "api-gateway"
+            "bff-service"
             "user-service"
+            "task-service"
+            "analytics-service"
+            "payment-service"
+            "gamification-service"
+            "practice-service"
+            "feedback-service"
+            "notification-service"
           )
 
           ALL_HEALTHY=true
