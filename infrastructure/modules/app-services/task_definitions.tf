@@ -859,6 +859,14 @@ resource "aws_ecs_task_definition" "analytics_service" {
         {
           name  = "RABBITMQ_STOMP_PORT"
           value = "61613"
+        },
+        {
+          name  = "SPRING_DATA_REDIS_HOST"
+          value = "redis.${var.service_discovery_namespace}"
+        },
+        {
+          name  = "SPRING_DATA_REDIS_PORT"
+          value = "6379"
         }
       ]
 

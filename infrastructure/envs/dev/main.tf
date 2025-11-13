@@ -166,11 +166,12 @@ module "ecs" {
 module "rds" {
   source = "../../modules/rds"
 
-  project_name          = local.project_name
-  environment           = local.environment
-  vpc_id                = module.networking.vpc_id
-  private_subnet_ids    = module.networking.private_subnet_ids
-  ecs_security_group_id = module.ecs.ecs_tasks_security_group_id
+  project_name                      = local.project_name
+  environment                       = local.environment
+  vpc_id                            = module.networking.vpc_id
+  private_subnet_ids                = module.networking.private_subnet_ids
+  ecs_security_group_id             = module.ecs.ecs_tasks_security_group_id
+  debug_instance_security_group_id  = "sg-0f940356c592ea2ec"
 
   db_name              = var.db_name
   db_username          = var.db_username

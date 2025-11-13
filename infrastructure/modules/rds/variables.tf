@@ -23,6 +23,11 @@ variable "ecs_security_group_id" {
   type        = string
 }
 
+variable "debug_instance_security_group_id" {
+  description = "Security group ID of debug instance for database access"
+  type        = string
+}
+
 variable "db_name" {
   description = "Name of the default database"
   type        = string
