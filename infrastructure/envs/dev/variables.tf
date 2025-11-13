@@ -100,3 +100,10 @@ variable "google_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "enable_log_export_to_s3" {
+  description = "Enable automatic export of CloudWatch logs to S3"
+  type        = bool
+  default     = false
+}
+

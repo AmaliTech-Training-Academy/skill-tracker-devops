@@ -108,18 +108,25 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Define services mapping
-          # ALL 12 MICROSERVICES: Infrastructure + Business services
+          # Define services mapping - ALL MICROSERVICES
+          # Infrastructure Services (3)
           NAMES=(
             config-server discovery-server api-gateway
-            bff-service user-service task-service analytics-service payment-service
-            gamification-service practice-service feedback-service notification-service
+            analytics-service bff-service feedback-service gamification-service
+            notification-service payment-service practice-service task-service user-service
           )
           PATHS=(
             skilltracker-infra/config-server
             skilltracker-infra/discovery-server
             skilltracker-infra/api-gateway
+            skilltracker-services/analytics-service
             skilltracker-services/bff-service
+            skilltracker-services/feedback-service
+            skilltracker-services/gamification-service
+            skilltracker-services/notification-service
+            skilltracker-services/payment-service
+            skilltracker-services/practice-service
+            skilltracker-services/task-service
             skilltracker-services/user-service
             skilltracker-services/task-service
             skilltracker-services/analytics-service
@@ -129,7 +136,7 @@ jobs:
             skilltracker-services/feedback-service
             skilltracker-services/notification-service
           )
-          PORTS=(8081 8082 8080 8083 8084 8085 8086 8087 8088 8089 8090 8091)
+          PORTS=(8081 8082 8080 8086 8083 8090 8088 8091 8087 8089 8085 8084)
 
           # If manual override is enabled, output all services and exit
           if [ "${{ inputs.force_full_build }}" = "true" ]; then

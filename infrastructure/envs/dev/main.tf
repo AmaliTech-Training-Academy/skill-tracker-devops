@@ -213,6 +213,11 @@ module "monitoring" {
   log_retention_days    = 30
   alarm_email_endpoints = var.alarm_email_endpoints
 
+  # S3 log export configuration
+  enable_log_export_to_s3 = var.enable_log_export_to_s3
+  app_logs_bucket_id      = module.s3.app_logs_bucket_id
+  app_logs_bucket_arn     = module.s3.app_logs_bucket_arn
+
   tags = local.common_tags
 }
 
