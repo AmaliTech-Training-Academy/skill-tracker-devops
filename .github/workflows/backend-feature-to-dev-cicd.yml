@@ -262,6 +262,10 @@ jobs:
             mvn -q clean install -DskipTests \
               -pl skilltracker-common/common-event,skilltracker-common/common-security,skilltracker-common/common-util \
               -am
+            
+            echo "📦 Building inter-dependent services..."
+            # Build user-service first (required by task-service)
+            mvn -q clean install -DskipTests -pl skilltracker-services/user-service -am
           elif [ -f "./pom.xml" ]; then
             echo "📦 Building parent project..."
             mvn -q clean install -DskipTests -N
