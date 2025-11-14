@@ -256,16 +256,15 @@ jobs:
         working-directory: backend
         run: |
           echo "🔧 Building shared dependencies first..."
-          # Build common-security if it exists
-          if [ -d "./common-security" ]; then
-            echo "📦 Building common-security..."
-            mvn -q clean install -DskipTests -f ./common-security/pom.xml
-          elif [ -d "./shared/common-security" ]; then
-            echo "📦 Building shared/common-security..."
-            mvn -q clean install -DskipTests -f ./shared/common-security/pom.xml
+          # Build skilltracker-common modules (required by services)
+          if [ -d "./skilltracker-common" ]; then
+            echo "📦 Building skilltracker-common modules..."
+            mvn -q clean install -DskipTests \
+              -pl skilltracker-common/common-event,skilltracker-common/common-security,skilltracker-common/common-util \
+              -am
           elif [ -f "./pom.xml" ]; then
-            echo "📦 Building parent project (may include shared modules)..."
-            mvn -q clean install -DskipTests -pl common-security -am 2>/dev/null || echo "No common-security module found in parent"
+            echo "📦 Building parent project..."
+            mvn -q clean install -DskipTests -N
           else
             echo "⚠️ No shared dependencies found - proceeding with service build"
           fi
