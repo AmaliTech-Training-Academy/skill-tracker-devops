@@ -71,7 +71,7 @@ module "ecs" {
   health_check_path            = "/actuator/health"
   monitoring_security_group_id = module.observability.monitoring_security_group_id
   adot_exporter_port           = 8889
-  enable_metrics_ingress      = true
+  enable_metrics_ingress       = true
 
   tags = local.common_tags
   services = {
@@ -166,12 +166,12 @@ module "ecs" {
 module "rds" {
   source = "../../modules/rds"
 
-  project_name                      = local.project_name
-  environment                       = local.environment
-  vpc_id                            = module.networking.vpc_id
-  private_subnet_ids                = module.networking.private_subnet_ids
-  ecs_security_group_id             = module.ecs.ecs_tasks_security_group_id
-  debug_instance_security_group_id  = "sg-0f940356c592ea2ec"
+  project_name                     = local.project_name
+  environment                      = local.environment
+  vpc_id                           = module.networking.vpc_id
+  private_subnet_ids               = module.networking.private_subnet_ids
+  ecs_security_group_id            = module.ecs.ecs_tasks_security_group_id
+  debug_instance_security_group_id = "sg-0f940356c592ea2ec"
 
   db_name              = var.db_name
   db_username          = var.db_username
@@ -279,8 +279,8 @@ module "data_services" {
   aws_region         = var.aws_region
   log_retention_days = 30
 
-  alb_listener_arn       = module.ecs.alb_listener_arn
-  alb_security_group_id  = module.ecs.alb_security_group_id
+  alb_listener_arn      = module.ecs.alb_listener_arn
+  alb_security_group_id = module.ecs.alb_security_group_id
 
   google_api_key = var.google_api_key
 
