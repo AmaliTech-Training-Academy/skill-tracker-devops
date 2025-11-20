@@ -441,11 +441,6 @@ module "amplify" {
       source = "/dashboard/*"
       status = "200"
       target = "/index.html"
-    },
-    {
-      source = "/<*>"
-      status = "404"
-      target = "/index.html"
     }
   ]
 
