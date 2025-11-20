@@ -31,21 +31,10 @@ resource "aws_cloudfront_distribution" "main" {
     target_origin_id       = "alb-origin"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods         = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
     compress               = true
-
-    forwarded_values {
-      query_string = true
-      headers      = ["*"]
-
-      cookies {
-        forward = "all"
-      }
-    }
-
-    min_ttl     = 0
-    default_ttl = 0
-    max_ttl     = 0
+    cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"  # Managed-CachingDisabled
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"  # Managed-AllViewer
   }
 
   # WebSocket specific cache behavior - uses Managed-AllViewer policy for WebSocket support
