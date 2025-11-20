@@ -396,7 +396,7 @@ module "amplify" {
   EOT
 
   environment_variables = {
-    NG_APP_URL  = module.api_gateway.api_gateway_url
+    NG_APP_URL  = "https://${module.cloudfront.cloudfront_domain_name}"
     ENVIRONMENT = local.environment
   }
 

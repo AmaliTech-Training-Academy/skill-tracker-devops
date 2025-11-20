@@ -15,6 +15,8 @@ resource "aws_cloudfront_distribution" "main" {
       https_port             = 443
       origin_protocol_policy = "http-only"
       origin_ssl_protocols   = ["TLSv1.2"]
+      # CloudFront has 60s max read timeout - WebSocket connections must send data
+      # within this window or connection will be terminated. STOMP heartbeats handle this.
       origin_read_timeout    = 60
       origin_keepalive_timeout = 60
     }
@@ -46,7 +48,7 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl     = 0
   }
 
-  # WebSocket specific cache behavior
+  # WebSocket specific cache behavior - uses Managed-AllViewer policy for WebSocket support
   ordered_cache_behavior {
     path_pattern           = "/ws/*"
     target_origin_id       = "alb-origin"
@@ -54,19 +56,8 @@ resource "aws_cloudfront_distribution" "main" {
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods         = ["GET", "HEAD"]
     compress               = false
-
-    forwarded_values {
-      query_string = true
-      headers      = ["*"]
-
-      cookies {
-        forward = "all"
-      }
-    }
-
-    min_ttl     = 0
-    default_ttl = 0
-    max_ttl     = 0
+    cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"  # Managed-CachingDisabled
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"  # Managed-AllViewer
   }
 
   restrictions {
