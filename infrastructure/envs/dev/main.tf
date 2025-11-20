@@ -373,19 +373,6 @@ module "amplify" {
         build:
           commands:
             - npx ng build
-        postBuild:
-          commands:
-            - |
-              cat > dist/SkillBoost/browser/_redirects << 'EOF'
-              /signup /index.html 200
-              /signup/ /index.html 200
-              /login /index.html 200
-              /login/ /index.html 200
-              /dashboard /index.html 200
-              /dashboard/ /index.html 200
-              /dashboard/* /index.html 200
-              /* /index.html 200
-              EOF
       artifacts:
         baseDirectory: dist/SkillBoost/browser
         files:
@@ -405,41 +392,11 @@ module "amplify" {
   enable_branch_auto_deletion   = true
   auto_branch_creation_patterns = ["dev"]
 
-  # SPA redirect rules for Angular routing
+  # SPA redirect rules - catch-all that excludes static files
   custom_rules = [
     {
-      source = "/signup"
-      status = "200"
-      target = "/index.html"
-    },
-    {
-      source = "/signup/"
-      status = "200"
-      target = "/index.html"
-    },
-    {
-      source = "/login"
-      status = "200"
-      target = "/index.html"
-    },
-    {
-      source = "/login/"
-      status = "200"
-      target = "/index.html"
-    },
-    {
-      source = "/dashboard"
-      status = "200"
-      target = "/index.html"
-    },
-    {
-      source = "/dashboard/"
-      status = "200"
-      target = "/index.html"
-    },
-    {
-      source = "/dashboard/*"
-      status = "200"
+      source = "/<*>"
+      status = "404-200"
       target = "/index.html"
     }
   ]
