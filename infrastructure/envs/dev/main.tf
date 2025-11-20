@@ -335,6 +335,18 @@ module "app_services" {
   adot_exporter_port  = 8889
 }
 
+# CloudFront Module - SSL for ALB (REST + WebSocket)
+module "cloudfront" {
+  source = "../../modules/cloudfront"
+
+  project_name = local.project_name
+  environment  = local.environment
+  alb_dns_name = module.ecs.alb_dns_name
+  price_class  = "PriceClass_100"
+
+  tags = local.common_tags
+}
+
 # Amplify Module - Frontend (handled by colleague)
 module "amplify" {
   source = "../../modules/amplify"

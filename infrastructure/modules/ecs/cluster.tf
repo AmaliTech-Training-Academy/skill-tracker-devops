@@ -129,6 +129,7 @@ resource "aws_lb" "main" {
 
   enable_deletion_protection = var.environment == "production" ? true : false
   enable_http2               = true
+  idle_timeout               = 3600
 
   tags = var.tags
 }
@@ -154,7 +155,13 @@ resource "aws_lb_target_group" "main" {
     matcher             = "200-299"
   }
 
-  deregistration_delay = 30
+  deregistration_delay = 300
+
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 86400
+    enabled         = true
+  }
 
   tags = var.tags
 }

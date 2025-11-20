@@ -47,6 +47,16 @@ output "api_gateway_url" {
   value       = module.api_gateway.api_gateway_url
 }
 
+output "cloudfront_url" {
+  description = "CloudFront distribution URL (use for HTTPS/WSS)"
+  value       = "https://${module.cloudfront.cloudfront_domain_name}"
+}
+
+output "cloudfront_domain" {
+  description = "CloudFront domain name"
+  value       = module.cloudfront.cloudfront_domain_name
+}
+
 output "amplify_app_url" {
   description = "URL of the Amplify app"
   value       = module.amplify.app_url
