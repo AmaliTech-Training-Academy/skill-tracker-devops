@@ -40,6 +40,15 @@ resource "aws_security_group" "data_services" {
     security_groups = [var.ecs_security_group_id]
   }
 
+  # RabbitMQ STOMP port
+  ingress {
+    description     = "RabbitMQ STOMP from ECS tasks"
+    from_port       = 61613
+    to_port         = 61613
+    protocol        = "tcp"
+    security_groups = [var.ecs_security_group_id]
+  }
+
   # RabbitMQ Management UI from ALB
   ingress {
     description     = "RabbitMQ Management from ALB"

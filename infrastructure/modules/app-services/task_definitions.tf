@@ -785,6 +785,9 @@ resource "aws_ecs_task_definition" "analytics_service" {
 
       environment = [
         {
+name="ANALYTICS_SCORE_LOW_RUBRIC_THRESHOLD",value="40",
+        },
+        {
           name  = "CONFIG_HOST"
           value = "config-server.${var.service_discovery_namespace}"
         },
@@ -1205,6 +1208,18 @@ resource "aws_ecs_task_definition" "notification_service" {
       {
         name  = "SPRING_RABBITMQ_PORT"
         value = "5672"
+      },
+      {
+        name  = "SPRING_DATA_MONGODB_HOST"
+        value = "mongodb.${var.service_discovery_namespace}"
+      },
+      {
+        name  = "SPRING_DATA_MONGODB_PORT"
+        value = "27017"
+      },
+      {
+        name  = "SPRING_DATA_MONGODB_DATABASE"
+        value = "notification_db"
       }
     ]
 
@@ -1216,6 +1231,22 @@ resource "aws_ecs_task_definition" "notification_service" {
       {
         name      = "RABBITMQ_PASSWORD"
         valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-rabbitmq-credentials-KgtgXp:password::"
+      },
+      {
+        name      = "SPRING_DATA_MONGODB_USERNAME"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-mongodb-credentials-7gkK4n:username::"
+      },
+      {
+        name      = "SPRING_DATA_MONGODB_PASSWORD"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-mongodb-credentials-7gkK4n:password::"
+      },
+      {
+        name      = "MONGO_USER"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-mongodb-credentials-7gkK4n:username::"
+      },
+      {
+        name      = "MONGO_PASSWORD"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-mongodb-credentials-7gkK4n:password::"
       }
     ]
 

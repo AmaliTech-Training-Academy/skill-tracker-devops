@@ -11,7 +11,7 @@ resource "aws_ecs_task_definition" "mongodb" {
   container_definitions = jsonencode([
     {
       name      = "mongodb"
-      image     = "mongo:7"
+      image     = "public.ecr.aws/docker/library/mongo:7"
       essential = true
 
       portMappings = [
@@ -108,7 +108,7 @@ resource "aws_ecs_task_definition" "redis" {
   container_definitions = jsonencode([
     {
       name      = "redis"
-      image     = "redis:7-alpine"
+      image     = "public.ecr.aws/docker/library/redis:7-alpine"
       essential = true
 
       portMappings = [
@@ -187,7 +187,7 @@ resource "aws_ecs_task_definition" "rabbitmq" {
   container_definitions = jsonencode([
     {
       name      = "rabbitmq"
-      image     = "rabbitmq:3-management-alpine"
+      image     = "public.ecr.aws/docker/library/rabbitmq:3-management"
       essential = true
 
       portMappings = [
@@ -205,7 +205,11 @@ resource "aws_ecs_task_definition" "rabbitmq" {
         }
       ]
 
-      user = "999:999"
+      command = [
+        "sh",
+        "-c",
+        "rabbitmq-plugins enable rabbitmq_stomp rabbitmq_web_stomp && rabbitmq-server"
+      ]
 
       environment = [
         {
