@@ -387,10 +387,6 @@ resource "aws_ecs_task_definition" "user_service" {
           value = "6379"
         },
         {
-          name  = "COOKIE_DOMAIN"
-          value = "localhost"
-        },
-        {
           name  = "COOKIE_SECURE"
           value = "true"
         },
