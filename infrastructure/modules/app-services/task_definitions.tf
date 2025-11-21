@@ -396,7 +396,7 @@ resource "aws_ecs_task_definition" "user_service" {
         },
         {
           name  = "BASE_URL"
-          value = "https://lmmqcw9520.execute-api.eu-west-1.amazonaws.com/dev"
+          value = "https://d32qfw4cukmoa9.cloudfront.net"
         },
         {
           name  = "FRONTEND_URL"
@@ -404,7 +404,7 @@ resource "aws_ecs_task_definition" "user_service" {
         },
         {
           name  = "GOOGLE_REDIRECT_URI"
-          value = "https://lmmqcw9520.execute-api.eu-west-1.amazonaws.com/dev/login/oauth2/code/{registrationId}"
+          value = "https://d32qfw4cukmoa9.cloudfront.net/login/oauth2/code/google"
         },
         {
           name  = "GOOGLE_AUTHORIZATION_URI"
@@ -436,7 +436,7 @@ resource "aws_ecs_task_definition" "user_service" {
         },
         {
           name  = "GITHUB_REDIRECT_URI"
-          value = "https://lmmqcw9520.execute-api.eu-west-1.amazonaws.com/dev/login/oauth2/code/github"
+          value = "https://d32qfw4cukmoa9.cloudfront.net/login/oauth2/code/github"
         },
         {
           name  = "GITHUB_CLIENT_AUTHENTICATION_METHOD"
