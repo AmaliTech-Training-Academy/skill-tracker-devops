@@ -59,7 +59,10 @@ resource "aws_iam_role_policy" "monitoring_cloudwatch" {
           "elasticloadbalancing:DescribeLoadBalancers",
           "elasticloadbalancing:DescribeTargetGroups",
           # Resource Groups (for tag-based queries)
-          "tag:GetResources"
+          "tag:GetResources",
+          # Cost Explorer (for cost/billing data)
+          "ce:GetCostAndUsage",
+          "ce:GetCostForecast"
         ]
         Resource = "*"
       }

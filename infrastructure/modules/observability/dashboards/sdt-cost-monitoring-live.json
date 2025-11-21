@@ -5,6 +5,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -160,12 +161,12 @@
           "metricName": "ServiceCost",
           "metricQueryType": 0,
           "namespace": "SDT/Costs",
-          "period": "604800",
+          "period": "86400",
           "queryMode": "Metrics",
           "refId": "A",
           "region": "default",
           "sqlExpression": "",
-          "statistic": "Average"
+          "statistic": "Sum"
         }
       ],
       "title": "ECS Service Charges",
@@ -243,12 +244,12 @@
           "metricName": "ServiceCost",
           "metricQueryType": 0,
           "namespace": "SDT/Costs",
-          "period": "604800",
+          "period": "86400",
           "queryMode": "Metrics",
           "refId": "A",
           "region": "default",
           "sqlExpression": "",
-          "statistic": "Average"
+          "statistic": "Sum"
         }
       ],
       "title": "RDS Charges",
@@ -617,12 +618,12 @@
           "metricName": "ServiceCost",
           "metricQueryType": 0,
           "namespace": "SDT/Costs",
-          "period": "604800",
+          "period": "86400",
           "queryMode": "Metrics",
           "refId": "A",
           "region": "default",
           "sqlExpression": "",
-          "statistic": "Average"
+          "statistic": "Sum"
         }
       ],
       "title": "EC2 Charges",
@@ -700,12 +701,12 @@
           "metricName": "ServiceCost",
           "metricQueryType": 0,
           "namespace": "SDT/Costs",
-          "period": "604800",
+          "period": "86400",
           "queryMode": "Metrics",
           "refId": "A",
           "region": "default",
           "sqlExpression": "",
-          "statistic": "Average"
+          "statistic": "Sum"
         }
       ],
       "title": "S3 Charges",
@@ -783,12 +784,12 @@
           "metricName": "ServiceCost",
           "metricQueryType": 0,
           "namespace": "SDT/Costs",
-          "period": "604800",
+          "period": "86400",
           "queryMode": "Metrics",
           "refId": "A",
           "region": "default",
           "sqlExpression": "",
-          "statistic": "Average"
+          "statistic": "Sum"
         }
       ],
       "title": "Amplify Charges",
@@ -866,12 +867,12 @@
           "metricName": "ServiceCost",
           "metricQueryType": 0,
           "namespace": "SDT/Costs",
-          "period": "604800",
+          "period": "86400",
           "queryMode": "Metrics",
           "refId": "A",
           "region": "default",
           "sqlExpression": "",
-          "statistic": "Average"
+          "statistic": "Sum"
         }
       ],
       "title": "VPC/NAT Gateway Charges",

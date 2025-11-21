@@ -40,6 +40,7 @@ Hybrid monitoring solution combining **Prometheus** (application metrics) and **
 ## Components
 
 ### 1. Prometheus (Application Metrics)
+
 - **Source**: ADOT sidecars scraping Spring Boot `/actuator/prometheus`
 - **Metrics**:
   - HTTP requests (rate, count, duration)
@@ -49,6 +50,7 @@ Hybrid monitoring solution combining **Prometheus** (application metrics) and **
   - Hikari connection pool (if exposed)
 
 ### 2. CloudWatch (Infrastructure Metrics)
+
 - **Source**: AWS native metrics
 - **Metrics**:
   - **ECS**: CPU, memory utilization
@@ -58,6 +60,7 @@ Hybrid monitoring solution combining **Prometheus** (application metrics) and **
   - **VPC**: Network packets
 
 ### 3. Cost Monitoring
+
 - **Source**: CloudWatch Billing metrics (us-east-1)
 - **Metrics**:
   - Total estimated charges
@@ -68,9 +71,11 @@ Hybrid monitoring solution combining **Prometheus** (application metrics) and **
 ## Dashboards
 
 ### Service Overview (Prometheus)
+
 **File**: `dashboards/sdt-service-overview.json`
 
 **Panels**:
+
 - Service Availability (targets up)
 - Requests per Second
 - Error Rate (5xx %)
@@ -85,9 +90,11 @@ Hybrid monitoring solution combining **Prometheus** (application metrics) and **
 **Variable**: `$service` (multi-select, all services)
 
 ### Infrastructure Overview (CloudWatch)
+
 **Managed by**: Terraform (`grafana_dashboards.tf`)
 
 **Panels**:
+
 - ECS Cluster CPU/Memory
 - RDS CPU/Connections/Storage
 - ALB Request Count/Response Time/5xx Errors
@@ -95,9 +102,11 @@ Hybrid monitoring solution combining **Prometheus** (application metrics) and **
 - VPC Network Packets
 
 ### Cost Monitoring (CloudWatch Billing)
+
 **Managed by**: Terraform (`grafana_dashboards.tf`)
 
 **Panels**:
+
 - Estimated AWS Charges (24h)
 - ECS/RDS Service Charges
 - Cost Trend (7 days)
@@ -108,7 +117,9 @@ Hybrid monitoring solution combining **Prometheus** (application metrics) and **
 ## Setup
 
 ### Prerequisites
+
 1. Enable **CloudWatch billing metrics** in AWS Console:
+
    - Billing → Billing Preferences → Receive Billing Alerts → Enable
    - Metrics appear in us-east-1 only
 
@@ -127,13 +138,16 @@ terraform apply -target=module.observability
 ```
 
 ### Access
+
 - **Grafana**: http://<public-ip>:3000
   - User: `admin`
   - Password: (set in `grafana_admin_password` variable)
 - **Prometheus**: http://<public-ip>:9090
 
 ### Import Dashboards
+
 Dashboards are auto-provisioned via Terraform. If manual import needed:
+
 1. Grafana → Dashboards → New → Import
 2. Upload `dashboards/sdt-service-overview.json`
 3. Select datasource: Prometheus
@@ -141,6 +155,7 @@ Dashboards are auto-provisioned via Terraform. If manual import needed:
 ## Configuration
 
 ### Variables
+
 ```hcl
 module "observability" {
   source = "../../modules/observability"
@@ -153,17 +168,19 @@ module "observability" {
   service_discovery_namespace = "dev.sdt.local"
   adot_exporter_port          = 8889
   grafana_admin_password      = "your-secure-password"
-  
+
   # Access control
   ssh_allowed_cidrs = []              # SSH disabled by default
   web_allowed_cidrs = ["0.0.0.0/0"]   # Restrict in production
-  
+
   tags = local.common_tags
 }
 ```
 
 ### Customize Dashboards
+
 Edit `grafana_dashboards.tf` to:
+
 - Add/remove panels
 - Adjust thresholds (CPU > 80%, error rate > 5%)
 - Change refresh intervals
@@ -185,6 +202,7 @@ grafana_dashboard.cost_monitoring
 ## Alerts (Future Enhancement)
 
 Add embedded alerts in panels:
+
 ```hcl
 alert = {
   name = "High Error Rate"
@@ -201,14 +219,18 @@ alert = {
 ## Persistence
 
 ### Prometheus Data
+
 Add volume mount in `user-data.sh`:
+
 ```bash
 -v /opt/observability/prometheus/data:/prometheus \
 --storage.tsdb.retention.time=15d
 ```
 
 ### Grafana Data
+
 Already persisted:
+
 ```bash
 -v /opt/observability/grafana:/var/lib/grafana
 ```
@@ -216,20 +238,24 @@ Already persisted:
 ## Troubleshooting
 
 ### Grafana can't reach Prometheus
+
 - Ensure both containers on `observability-net` network
 - Check datasource URL: `http://prometheus:9090`
 
 ### CloudWatch metrics missing
+
 - Verify IAM role attached to EC2
 - Check region (billing metrics only in us-east-1)
 - Enable billing alerts in AWS Console
 
 ### Dashboard not auto-provisioned
+
 - Check Terraform apply output for errors
 - Verify Grafana provider auth
 - Manual import: use JSON from `dashboards/`
 
 ### Cost metrics showing $0
+
 - Enable billing alerts in AWS Console
 - Wait 24h for first data points
 - Metrics only in us-east-1
@@ -240,21 +266,176 @@ Already persisted:
 - **Staging**: t3.medium (~$30/month)
 - **Production**: t3.large + EBS volume (~$60/month)
 
-## Security
-
-- Restrict `web_allowed_cidrs` to your IP/VPN
-- Use strong `grafana_admin_password`
-- Consider ALB + HTTPS for Grafana in production
-- IAM role follows least-privilege (read-only CloudWatch)
-
 ## Maintenance
 
 - **Prometheus retention**: 15 days (configurable)
 - **Grafana backups**: Export dashboards to JSON
 - **Updates**: Rebuild instance with `user_data_replace_on_change = true`
 
-## References
+# Cost Monitoring Dashboard
 
-- [Prometheus Query Examples](https://prometheus.io/docs/prometheus/latest/querying/examples/)
-- [CloudWatch Metrics Reference](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/aws-services-cloudwatch-metrics.html)
-- [Grafana Dashboard Best Practices](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/best-practices/)
+## Overview
+
+The Cost Monitoring dashboard in Grafana displays AWS costs **excluding credits, refunds, and taxes** using a custom Lambda-based solution that fetches data from AWS Cost Explorer and publishes it to CloudWatch as custom metrics.
+
+## Architecture
+
+```
+AWS Cost Explorer → Lambda (Daily) → CloudWatch Custom Metrics → Grafana Dashboard
+```
+
+### Components
+
+1. **Lambda Function** ([cost_exporter.py](lambda/cost_exporter.py))
+
+   - Runs daily at 00:00 UTC via EventBridge
+   - Fetches cost data from AWS Cost Explorer API
+   - Filters out credits, refunds, and taxes
+   - Publishes metrics to CloudWatch namespace: `SDT/Costs`
+
+2. **CloudWatch Custom Metrics**
+
+   - `TotalCost`: Total AWS charges (excluding credits)
+   - `ServiceCost`: Per-service costs with dimension `ServiceName`
+
+3. **Grafana Dashboard** ([sdt-cost-monitoring.json](dashboards/sdt-cost-monitoring.json))
+   - Displays cost data from CloudWatch custom metrics
+   - Shows total costs and breakdown by service
+   - Updates hourly (data refreshes daily via Lambda)
+
+## Why This Solution?
+
+The standard AWS CloudWatch Billing metrics (`AWS/Billing` namespace) include credits, which can make costs appear as $0 even when you have actual charges. The AWS Cost Explorer Console allows filtering out credits, but CloudWatch Billing metrics do not support this filtering.
+
+Our solution:
+
+- Uses the Cost Explorer API with filters to exclude credits, refunds, and taxes
+- Publishes filtered cost data as custom CloudWatch metrics
+- Provides accurate cost visibility in Grafana
+
+## Metrics Published
+
+### Total Cost Metric
+
+- **Namespace**: `SDT/Costs`
+- **Metric Name**: `TotalCost`
+- **Dimensions**: `Project`, `Environment`
+- **Statistic**: Maximum
+- **Period**: 86400 seconds (1 day)
+
+### Service Cost Metrics
+
+- **Namespace**: `SDT/Costs`
+- **Metric Name**: `ServiceCost`
+- **Dimensions**: `Project`, `Environment`, `ServiceName`
+- **Statistic**: Sum
+- **Period**: 86400 seconds (1 day)
+
+Service names are mapped to friendly names:
+
+- `ECS` - Amazon Elastic Container Service
+- `RDS` - Amazon Relational Database Service
+- `EC2` - Amazon Elastic Compute Cloud
+- `S3` - Amazon Simple Storage Service
+- `Amplify` - AWS Amplify
+- `VPC` - Amazon Virtual Private Cloud (NAT Gateway)
+- `CloudWatch` - Amazon CloudWatch
+- `Lambda` - AWS Lambda
+- `CloudFront` - Amazon CloudFront
+
+## IAM Permissions
+
+The Lambda function requires the following permissions:
+
+```json
+{
+  "ce:GetCostAndUsage",
+  "ce:GetCostForecast",
+  "cloudwatch:PutMetricData",
+  "logs:CreateLogGroup",
+  "logs:CreateLogStream",
+  "logs:PutLogEvents"
+}
+```
+
+## Manual Testing
+
+To manually trigger the Lambda function and test the cost export:
+
+```bash
+aws lambda invoke \
+  --function-name sdt-dev-cost-exporter \
+  --region us-east-1 \
+  --output text \
+  response.json
+
+cat response.json
+```
+
+Check CloudWatch Logs:
+
+```bash
+aws logs tail /aws/lambda/sdt-dev-cost-exporter --follow
+```
+
+Verify metrics were published:
+
+```bash
+aws cloudwatch list-metrics \
+  --namespace "SDT/Costs" \
+  --region us-east-1
+```
+
+## Troubleshooting
+
+### Dashboard shows "No data"
+
+1. **Check if Lambda has run**:
+
+   ```bash
+   aws logs tail /aws/lambda/sdt-dev-cost-exporter --since 1h
+   ```
+
+2. **Manually invoke Lambda**:
+
+   ```bash
+   aws lambda invoke --function-name sdt-dev-cost-exporter response.json
+   ```
+
+3. **Verify metrics in CloudWatch**:
+
+   - Go to AWS Console → CloudWatch → Metrics
+   - Search for namespace: `SDT/Costs`
+   - Check if metrics exist
+
+4. **Check IAM permissions**:
+   - Ensure Lambda role has `ce:GetCostAndUsage` permission
+   - Ensure Lambda role has `cloudwatch:PutMetricData` permission
+
+### Dashboard shows $0 for all services
+
+1. **Check Cost Explorer data**:
+
+   - Go to AWS Console → Cost Explorer
+   - Verify you have actual costs (excluding credits)
+   - Ensure you're looking at the correct time period
+
+2. **Check Lambda logs for errors**:
+   ```bash
+   aws logs tail /aws/lambda/sdt-dev-cost-exporter --since 24h | grep ERROR
+   ```
+
+### Lambda execution fails
+
+1. **Check Lambda timeout**: Current timeout is 60 seconds (should be sufficient)
+2. **Check Lambda logs for specific errors**:
+   ```bash
+   aws logs tail /aws/lambda/sdt-dev-cost-exporter --since 1h --follow
+   ```
+
+## Cost Considerations
+
+- **Lambda**: Runs once daily, costs < $0.01/month
+- **CloudWatch Custom Metrics**: ~10 metrics, costs ~$0.30/month
+- **CloudWatch Logs**: Minimal, costs < $0.10/month
+- **Total estimated cost**: < $0.50/month
