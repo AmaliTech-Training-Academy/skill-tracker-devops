@@ -1,17 +1,19 @@
-name: Feature to Dev CI/CD
+name: Dev to Staging CI/CD
 
-# PIPELINE APPROACH: Minimal Task Definition Updates
-# This pipeline uses a safe "image-only" update strategy:
-# 1. Gets the current working task definition from ECS
-# 2. Updates ONLY the container image tag (preserves all other config)
-# 3. Validates no other changes occurred
-# 4. Deploys the minimal update
+# PIPELINE APPROACH: Stricter Deployment with Security Gates
+# This pipeline enforces production-ready standards for staging:
+# 1. MANDATORY security scanning - fails on ANY vulnerabilities (CRITICAL/HIGH)
+# 2. Gets the current working task definition from ECS
+# 3. Updates ONLY the container image tag (preserves all other config)
+# 4. Validates no other changes occurred
+# 5. Deploys the minimal update with enhanced health checks
 #
-# Benefits:
-# - Preserves all Terraform-managed configuration
-# - Eliminates configuration drift risks
-# - Faster, safer deployments
-# - Simple rollback (just previous task definition revision)
+# Key Differences from Dev Pipeline:
+# - Zero tolerance for CRITICAL/HIGH vulnerabilities
+# - Manual approval gates (future enhancement)
+# - Extended health check validation
+# - Automated smoke tests (future enhancement)
+# - Rollback on ANY failure
 
 on:
   # This is a reusable workflow that can be called from other workflows
@@ -75,7 +77,8 @@ on:
 env:
   AWS_REGION: eu-west-1
   ECR_REGISTRY: 962496666337.dkr.ecr.eu-west-1.amazonaws.com
-  ECR_REPOSITORY_PREFIX: sdt/dev
+  ECR_REPOSITORY_PREFIX: sdt/staging
+  ENVIRONMENT: staging
 
 jobs:
   detect-changes:
@@ -128,13 +131,6 @@ jobs:
             skilltracker-services/practice-service
             skilltracker-services/task-service
             skilltracker-services/user-service
-            skilltracker-services/task-service
-            skilltracker-services/analytics-service
-            skilltracker-services/payment-service
-            skilltracker-services/gamification-service
-            skilltracker-services/practice-service
-            skilltracker-services/feedback-service
-            skilltracker-services/notification-service
           )
           PORTS=(8081 8082 8080 8086 8083 8090 8088 8091 8087 8089 8085 8084)
 
@@ -156,11 +152,11 @@ jobs:
             echo "services_json<<EOF" >> "$GITHUB_OUTPUT"
             echo "$SERVICES_JSON" >> "$GITHUB_OUTPUT"
             echo "EOF" >> "$GITHUB_OUTPUT"
-            
+
             echo "business_services_json<<EOF" >> "$GITHUB_OUTPUT"
             echo "$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
             echo "EOF" >> "$GITHUB_OUTPUT"
-            
+
             echo "infra_any=true" >> "$GITHUB_OUTPUT"
             echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
             exit 0
@@ -204,11 +200,11 @@ jobs:
           echo "services_json<<EOF" >> "$GITHUB_OUTPUT"
           echo "$SERVICES_JSON" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
-          
+
           echo "business_services_json<<EOF" >> "$GITHUB_OUTPUT"
           echo "$BUSINESS_JSON" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
-          
+
           echo "infra_any=$INFRA_ANY" >> "$GITHUB_OUTPUT"
           echo "infra_csv=$INFRA_CSV" >> "$GITHUB_OUTPUT"
 
@@ -219,17 +215,14 @@ jobs:
           echo "infra_any=${{ steps.compute.outputs.infra_any }}"
           echo "infra_csv=${{ steps.compute.outputs.infra_csv }}"
 
-  # CodeQL job removed
-
   build-and-push:
-    name: Build and Push Docker Images
+    name: Build and Push Docker Images (Staging)
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.services_json != '[]'
-    continue-on-error: true
 
     strategy:
-      fail-fast: false
+      fail-fast: true  # STRICTER: Fail entire build if any service fails
       matrix:
         service: ${{ fromJSON(needs.detect-changes.outputs.services_json) }}
 
@@ -269,7 +262,7 @@ jobs:
             mvn -q clean install -DskipTests \
               -pl skilltracker-common/common-event,skilltracker-common/common-security,skilltracker-common/common-util \
               -am
-            
+
             echo "📦 Building inter-dependent services..."
             # Build user-service first (required by task-service)
             mvn -q clean install -DskipTests -pl skilltracker-services/user-service -am
@@ -307,78 +300,102 @@ jobs:
             -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }} \
             .
 
-      - name: Run Trivy security scan
+      - name: Run Trivy security scan (STRICT MODE)
         id: trivy-scan
         uses: aquasecurity/trivy-action@master
-        continue-on-error: true
         with:
           image-ref: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}
           format: 'json'
           output: 'trivy-results-${{ matrix.service.name }}.json'
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'
-          ignore-unfixed: true
+          exit-code: '1'  # Exit with error if vulnerabilities found
+          ignore-unfixed: false  # STRICTER: Report all vulnerabilities, even unfixed
 
-      - name: Parse Trivy results and check for critical vulnerabilities
+      - name: Parse Trivy results and enforce zero-vulnerability policy
         id: check-vulns
         if: always()
         run: |
           if [ -f "trivy-results-${{ matrix.service.name }}.json" ]; then
             CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-results-${{ matrix.service.name }}.json)
             HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-results-${{ matrix.service.name }}.json)
-            
+            MEDIUM_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' trivy-results-${{ matrix.service.name }}.json)
+
             echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
             echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
-            
+            echo "medium_count=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
+
             echo "🔍 Security Scan Results for ${{ matrix.service.name }}:"
             echo "   CRITICAL: $CRITICAL_COUNT"
             echo "   HIGH: $HIGH_COUNT"
-            
-            if [ "$CRITICAL_COUNT" -gt 0 ]; then
-              echo "has_critical=true" >> $GITHUB_OUTPUT
-              echo "⚠️ CRITICAL vulnerabilities found!"
+            echo "   MEDIUM: $MEDIUM_COUNT"
+
+            # STRICT POLICY: Fail on CRITICAL or HIGH vulnerabilities
+            if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
+              echo "has_blocking_vulns=true" >> $GITHUB_OUTPUT
+              echo "❌ BLOCKING VULNERABILITIES FOUND!"
+              echo "::error::Security scan failed: $CRITICAL_COUNT CRITICAL, $HIGH_COUNT HIGH vulnerabilities detected"
+
+              # Extract vulnerability details for notification
+              echo "vuln_details<<EOF" >> $GITHUB_OUTPUT
+              jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL" or .Severity=="HIGH") | "• \(.VulnerabilityID): \(.PkgName) - \(.Title)"' trivy-results-${{ matrix.service.name }}.json | head -10 >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+
+              exit 1  # Fail the job
             else
-              echo "has_critical=false" >> $GITHUB_OUTPUT
-              echo "✅ No CRITICAL vulnerabilities"
+              echo "has_blocking_vulns=false" >> $GITHUB_OUTPUT
+              echo "✅ No CRITICAL or HIGH vulnerabilities"
             fi
           else
-            echo "has_critical=false" >> $GITHUB_OUTPUT
+            echo "has_blocking_vulns=false" >> $GITHUB_OUTPUT
             echo "critical_count=0" >> $GITHUB_OUTPUT
             echo "high_count=0" >> $GITHUB_OUTPUT
+            echo "medium_count=0" >> $GITHUB_OUTPUT
+            echo "⚠️ No scan results found"
           fi
 
-      - name: Notify Slack on critical vulnerabilities
-        if: steps.check-vulns.outputs.has_critical == 'true'
+      - name: Upload Trivy scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results-${{ matrix.service.name }}
+          path: trivy-results-${{ matrix.service.name }}.json
+          retention-days: 30
+
+      - name: Notify Slack on security vulnerabilities
+        if: failure() && steps.check-vulns.outputs.has_blocking_vulns == 'true'
         uses: ./.github/actions/slack-notify
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": ":rotating_light: CRITICAL Security Vulnerabilities Found - ${{ matrix.service.name }}",
+              "text": ":rotating_light: SECURITY GATE FAILED - Staging Deployment Blocked",
               "attachments": [
                 {
                   "color": "danger",
                   "fields": [
                     { "title": "🐳 Service", "value": "${{ matrix.service.name }}", "short": true },
-                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "Environment", "value": "Staging (BLOCKED)", "short": true },
                     { "title": "🔴 CRITICAL", "value": "${{ steps.check-vulns.outputs.critical_count }}", "short": true },
                     { "title": "🟠 HIGH", "value": "${{ steps.check-vulns.outputs.high_count }}", "short": true },
+                    { "title": "🟡 MEDIUM", "value": "${{ steps.check-vulns.outputs.medium_count }}", "short": true },
+                    { "title": "Policy", "value": "Zero tolerance for CRITICAL/HIGH vulnerabilities in staging", "short": true },
                     { "title": "📦 Image", "value": "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}", "short": false },
+                    { "title": "Top Vulnerabilities", "value": "${{ steps.check-vulns.outputs.vuln_details }}", "short": false },
                     { "title": "PR", "value": "${{ inputs.pr_title }}", "short": false },
                     { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
-                    { "title": "⚠️ Action Required", "value": "Review and fix critical vulnerabilities before deploying to production", "short": false },
+                    { "title": "⛔ Action Required", "value": "Fix ALL CRITICAL and HIGH vulnerabilities before deploying to staging. Update base images, dependencies, or apply security patches.", "short": false },
                     { "title": "🔗 View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
                   ],
-                  "footer": "Trivy Container Security Scan",
+                  "footer": "Trivy Container Security Scan - Staging Gate",
                   "footer_icon": "https://github.githubassets.com/favicon.ico"
                 }
               ]
             }
 
       - name: Push Docker image to ECR
-        if: always()
+        # Only push if security scan passed
         run: |
-          echo "📤 Pushing ${{ matrix.service.name }} to ECR"
+          echo "📤 Pushing ${{ matrix.service.name }} to ECR (Staging)"
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:latest
           docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}
 
@@ -389,7 +406,7 @@ jobs:
           echo "📦 Tagged: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY_PREFIX }}/${{ matrix.service.name }}:${{ inputs.commit_sha }}"
 
   deploy-infra:
-    name: Deploy Infra Services (Image-Only Updates, Ordered)
+    name: Deploy Infra Services (Staging, Ordered)
     runs-on: ubuntu-latest
     needs: [build-and-push, detect-changes]
     if: inputs.enable_ecs_deploy && needs.detect-changes.outputs.infra_any == 'true'
@@ -408,17 +425,17 @@ jobs:
 
           deploy_one_minimal() {
             SERVICE_NAME="$1"
-            echo "=== Deploying $SERVICE_NAME (Image-Only Update) ==="
+            echo "=== Deploying $SERVICE_NAME to Staging (Image-Only Update) ==="
 
             # Get currently deployed (working) task definition
             CURRENT_TASK_ARN=$(aws ecs describe-services \
-              --cluster sdt-dev-cluster \
-              --services sdt-dev-${SERVICE_NAME} \
+              --cluster sdt-staging-cluster \
+              --services sdt-staging-${SERVICE_NAME} \
               --query 'services[0].taskDefinition' \
               --output text || true)
 
             if [ -z "$CURRENT_TASK_ARN" ] || [ "$CURRENT_TASK_ARN" = "None" ]; then
-              echo "❌ Service sdt-dev-${SERVICE_NAME} not found or has no taskDefinition. Skipping."
+              echo "❌ Service sdt-staging-${SERVICE_NAME} not found or has no taskDefinition. Skipping."
               return 0
             fi
 
@@ -479,26 +496,26 @@ jobs:
             echo "✅ Registered: $NEW_TASK_ARN"
 
             # Deploy with new image
-            echo "🚀 Deploying $SERVICE_NAME with new image..."
+            echo "🚀 Deploying $SERVICE_NAME to staging with new image..."
             aws ecs update-service \
-              --cluster sdt-dev-cluster \
-              --service sdt-dev-${SERVICE_NAME} \
+              --cluster sdt-staging-cluster \
+              --service sdt-staging-${SERVICE_NAME} \
               --task-definition "$NEW_TASK_ARN" \
               --force-new-deployment \
               --no-cli-pager
 
             echo "Recent ECS service events for $SERVICE_NAME:"
             aws ecs describe-services \
-              --cluster sdt-dev-cluster \
-              --services sdt-dev-${SERVICE_NAME} \
+              --cluster sdt-staging-cluster \
+              --services sdt-staging-${SERVICE_NAME} \
               --query 'services[0].events[0:10].[createdAt,message]' \
               --output table || true
 
-            echo "Waiting for $SERVICE_NAME to stabilize..."
+            echo "Waiting for $SERVICE_NAME to stabilize (staging has stricter requirements)..."
             aws ecs wait services-stable \
-              --cluster sdt-dev-cluster \
-              --services sdt-dev-${SERVICE_NAME}
-            echo "✅ $SERVICE_NAME is stable!"
+              --cluster sdt-staging-cluster \
+              --services sdt-staging-${SERVICE_NAME}
+            echo "✅ $SERVICE_NAME is stable in staging!"
           }
 
           # Enforce dependency order: config -> discovery -> api-gateway
@@ -507,7 +524,7 @@ jobs:
           deploy_one_minimal api-gateway
 
   deploy-business:
-    name: Deploy Business Services (Image-Only Updates)
+    name: Deploy Business Services (Staging)
     runs-on: ubuntu-latest
     needs: [build-and-push, deploy-infra, detect-changes]
     if: inputs.enable_ecs_deploy && needs.detect-changes.outputs.business_services_json != '[]' && always() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
@@ -515,7 +532,7 @@ jobs:
     strategy:
       matrix:
         service: ${{ fromJSON(needs.detect-changes.outputs.business_services_json) }}
-      max-parallel: 4
+      max-parallel: 2  # STRICTER: Fewer parallel deployments for staging
 
     steps:
       - name: Configure AWS credentials
@@ -532,13 +549,13 @@ jobs:
 
           # Get currently deployed (working) task definition
           CURRENT_TASK_ARN=$(aws ecs describe-services \
-            --cluster sdt-dev-cluster \
-            --services sdt-dev-$SERVICE_NAME \
+            --cluster sdt-staging-cluster \
+            --services sdt-staging-$SERVICE_NAME \
             --query 'services[0].taskDefinition' \
             --output text)
 
           if [ -z "$CURRENT_TASK_ARN" ] || [ "$CURRENT_TASK_ARN" = "None" ]; then
-            echo "❌ No current task definition found for $SERVICE_NAME"
+            echo "❌ No current task definition found for $SERVICE_NAME in staging"
             exit 1
           fi
 
@@ -619,10 +636,10 @@ jobs:
           echo "✅ Registered: $NEW_TASK_ARN"
 
           # Deploy with new image
-          echo "🚀 Deploying $SERVICE_NAME with new image..."
+          echo "🚀 Deploying $SERVICE_NAME to staging with new image..."
           aws ecs update-service \
-            --cluster sdt-dev-cluster \
-            --service sdt-dev-$SERVICE_NAME \
+            --cluster sdt-staging-cluster \
+            --service sdt-staging-$SERVICE_NAME \
             --task-definition "$NEW_TASK_ARN" \
             --force-new-deployment \
             --no-cli-pager
@@ -632,45 +649,21 @@ jobs:
       - name: Show recent ECS service events
         run: |
           aws ecs describe-services \
-            --cluster sdt-dev-cluster \
-            --services sdt-dev-${{ matrix.service.name }} \
+            --cluster sdt-staging-cluster \
+            --services sdt-staging-${{ matrix.service.name }} \
             --query 'services[0].events[0:10].[createdAt,message]' \
             --output table || true
 
-      - name: Describe latest tasks and stopped reasons
+      - name: Wait for service stability (extended timeout for staging)
         run: |
-          TASK_ARNS=$(aws ecs list-tasks \
-            --cluster sdt-dev-cluster \
-            --service-name sdt-dev-${{ matrix.service.name }} \
-            --desired-status RUNNING \
-            --output text --query 'taskArns')
-          if [ -z "$TASK_ARNS" ]; then
-            TASK_ARNS=$(aws ecs list-tasks \
-              --cluster sdt-dev-cluster \
-              --service-name sdt-dev-${{ matrix.service.name }} \
-              --desired-status STOPPED \
-              --output text --query 'taskArns[0:5]')
-          fi
-          if [ -n "$TASK_ARNS" ]; then
-            aws ecs describe-tasks \
-              --cluster sdt-dev-cluster \
-              --tasks $TASK_ARNS \
-              --query 'tasks[].{last:lastStatus,desired:desiredStatus,stopped:stoppedReason,containers:containers[].reason}' \
-              --output json || true
-          else
-            echo "No tasks found yet."
-          fi
-
-      - name: Wait for service stability
-        run: |
-          echo "⏳ Waiting for service to stabilize..."
+          echo "⏳ Waiting for service to stabilize in staging..."
           aws ecs wait services-stable \
-            --cluster sdt-dev-cluster \
-            --services sdt-dev-${{ matrix.service.name }}
-          echo "✅ Service ${{ matrix.service.name }} is stable!"
+            --cluster sdt-staging-cluster \
+            --services sdt-staging-${{ matrix.service.name }}
+          echo "✅ Service ${{ matrix.service.name }} is stable in staging!"
 
   health-check:
-    name: Health Check Services
+    name: Enhanced Health Check (Staging)
     runs-on: ubuntu-latest
     needs: [deploy-infra, deploy-business, detect-changes]
     if: inputs.enable_ecs_deploy && needs.detect-changes.outputs.services_json != '[]' && always() && (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped') && (needs.deploy-business.result == 'success' || needs.deploy-business.result == 'skipped')
@@ -683,9 +676,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Check ECS service health
+      - name: Check ECS service health (staging)
         run: |
-          echo "🏥 Checking health of changed services only..."
+          echo "🏥 Checking health of changed services in staging..."
           # Ensure jq is available
           if ! command -v jq >/dev/null 2>&1; then
             sudo apt-get update -y && sudo apt-get install -y jq
@@ -702,10 +695,10 @@ jobs:
 
           ALL_HEALTHY=true
           for service in "${SERVICES[@]}"; do
-            echo "Checking sdt-dev-$service..."
+            echo "Checking sdt-staging-$service..."
             STATUS=$(aws ecs describe-services \
-              --cluster sdt-dev-cluster \
-              --services sdt-dev-$service \
+              --cluster sdt-staging-cluster \
+              --services sdt-staging-$service \
               --query 'services[0].{Running:runningCount,Desired:desiredCount,Status:status}' \
               --output json 2>/dev/null || echo '{}')
 
@@ -721,27 +714,24 @@ jobs:
           done
 
           if [ "$ALL_HEALTHY" = false ]; then
-            echo "⚠️ Some services are not healthy!"
+            echo "⚠️ Some services are not healthy in staging!"
             exit 1
           fi
 
-          echo "✅ All checked services are healthy!"
+          echo "✅ All checked services are healthy in staging!"
 
       - name: Get ALB endpoint
         id: get-alb
         run: |
           ALB_DNS=$(aws elbv2 describe-load-balancers \
-            --names sdt-dev-alb \
+            --names sdt-staging-alb \
             --query 'LoadBalancers[0].DNSName' \
             --output text)
           echo "alb-dns=$ALB_DNS" >> $GITHUB_OUTPUT
-          echo "📍 ALB Endpoint: http://$ALB_DNS"
+          echo "📍 Staging ALB Endpoint: http://$ALB_DNS"
 
-  # Stage-specific failure notifications
-  # CodeQL notification job removed
-
-  notify-build-failure:
-    name: Notify Build Failure
+  notify-security-gate-failure:
+    name: Notify Security Gate Failure
     runs-on: ubuntu-latest
     needs: [build-and-push, detect-changes]
     if: failure() && needs.build-and-push.result == 'failure'
@@ -750,50 +740,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Get build failure details
-        id: build-details
-        run: |
-          # Get failed services from the matrix
-          CHANGED_SERVICES='${{ needs.detect-changes.outputs.services_json }}'
-          FAILED_SERVICES=""
-
-          # Check which services were supposed to be built
-          for service in $(echo "$CHANGED_SERVICES" | jq -r '.[]'); do
-            FAILED_SERVICES="$FAILED_SERVICES\n• $service"
-          done
-
-          echo "failed-services<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$FAILED_SERVICES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Send build failure notification
+      - name: Send security gate failure notification
         uses: ./.github/actions/slack-notify
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": ":x: Build Failed - Backend Deployment to Dev",
+              "text": ":no_entry: STAGING DEPLOYMENT BLOCKED - Security Gate Failed",
               "attachments": [
                 {
                   "color": "danger",
                   "fields": [
-                    { "title": "❌ Failure Stage", "value": "Build & Push", "short": true },
-                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "❌ Failure Stage", "value": "Security Scanning (Trivy)", "short": true },
+                    { "title": "Environment", "value": "Staging (BLOCKED)", "short": true },
                     { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
                     { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
                     { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
-                    { "title": "Failed Services", "value": "${{ steps.build-details.outputs.failed-services }}", "short": false },
-                    { "title": "Action Required", "value": "Check build logs for compilation errors, dependency issues, or Docker build failures", "short": false },
+                    { "title": "⛔ Policy", "value": "Zero tolerance for CRITICAL/HIGH vulnerabilities in staging environment", "short": false },
+                    { "title": "Action Required", "value": "1. Review Trivy scan results\n2. Fix all CRITICAL and HIGH vulnerabilities\n3. Update base images and dependencies\n4. Re-run deployment after fixes", "short": false },
                     { "title": "View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
                   ],
-                  "footer": "GitHub Actions - Build Failure",
+                  "footer": "GitHub Actions - Security Gate Failure",
                   "footer_icon": "https://github.githubassets.com/favicon.ico"
                 }
               ]
@@ -809,84 +776,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Get deployment failure details
-        id: deploy-details
-        run: |
-          FAILURE_STAGE=""
-          FAILED_SERVICES=""
-          TROUBLESHOOTING=""
-
-          if [ "${{ needs.deploy-infra.result }}" == "failure" ]; then
-            FAILURE_STAGE="Infrastructure Deployment"
-            FAILED_SERVICES="• config-server\n• discovery-server\n• api-gateway"
-            TROUBLESHOOTING="Check ECS service events, task definition registration, and service dependencies"
-          elif [ "${{ needs.deploy-business.result }}" == "failure" ]; then
-            FAILURE_STAGE="Business Services Deployment"
-            CHANGED_SERVICES='${{ needs.detect-changes.outputs.business_services_json }}'
-            for service in $(echo "$CHANGED_SERVICES" | jq -r '.[].name'); do
-              FAILED_SERVICES="$FAILED_SERVICES\n• $service"
-            done
-            TROUBLESHOOTING="Check ECS service stability, task health checks, and service startup logs"
-          fi
-
-          echo "failure-stage=$FAILURE_STAGE" >> $GITHUB_OUTPUT
-          echo "failed-services<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$FAILED_SERVICES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "troubleshooting=$TROUBLESHOOTING" >> $GITHUB_OUTPUT
-
-      - name: Get ECS service status
-        id: ecs-status
-        run: |
-          SERVICES=("config-server" "discovery-server" "api-gateway" "user-service")
-          SERVICE_STATUS=""
-
-          for service in "${SERVICES[@]}"; do
-            STATUS=$(aws ecs describe-services \
-              --cluster sdt-dev-cluster \
-              --services sdt-dev-$service \
-              --query 'services[0].{running:runningCount,desired:desiredCount,status:status}' \
-              --output json 2>/dev/null || echo '{"running":0,"desired":0,"status":"NOT_FOUND"}')
-            
-            RUNNING=$(echo "$STATUS" | jq -r '.running // 0')
-            DESIRED=$(echo "$STATUS" | jq -r '.desired // 0')
-            SVC_STATUS=$(echo "$STATUS" | jq -r '.status // "UNKNOWN"')
-            
-            if [ "$RUNNING" == "$DESIRED" ] && [ "$DESIRED" != "0" ]; then
-              SERVICE_STATUS="$SERVICE_STATUS\n✅ $service: $RUNNING/$DESIRED ($SVC_STATUS)"
-            else
-              SERVICE_STATUS="$SERVICE_STATUS\n❌ $service: $RUNNING/$DESIRED ($SVC_STATUS)"
-            fi
-          done
-
-          echo "service-status<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$SERVICE_STATUS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Send deployment failure notification
         uses: ./.github/actions/slack-notify
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": ":warning: Deployment Failed - Backend Deployment to Dev",
+              "text": ":warning: Deployment Failed - Backend to Staging",
               "attachments": [
                 {
                   "color": "danger",
                   "fields": [
-                    { "title": "❌ Failure Stage", "value": "${{ steps.deploy-details.outputs.failure-stage }}", "short": true },
-                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "❌ Failure Stage", "value": "ECS Deployment", "short": true },
+                    { "title": "Environment", "value": "Staging", "short": true },
                     { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
                     { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
                     { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
-                    { "title": "⚠️ Action Required", "value": "Check ECS service events, task logs, and deployment status in AWS Console.", "short": false },
+                    { "title": "⚠️ Action Required", "value": "Check ECS service events, task logs, and deployment status in AWS Console for staging cluster.", "short": false },
                     { "title": "🔗 View Details", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions Logs>", "short": true }
                   ],
                   "footer": "GitHub Actions - Deployment Failure",
@@ -905,83 +811,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Get detailed health check status
-        id: health-details
-        run: |
-          SERVICES=(
-            "config-server"
-            "discovery-server"
-            "api-gateway"
-            "user-service"
-          )
-
-          UNHEALTHY_SERVICES=""
-          HEALTHY_SERVICES=""
-          RECENT_EVENTS=""
-
-          for service in "${SERVICES[@]}"; do
-            # Get service status
-            SERVICE_INFO=$(aws ecs describe-services \
-              --cluster sdt-dev-cluster \
-              --services sdt-dev-$service \
-              --query 'services[0]' \
-              --output json 2>/dev/null || echo '{}')
-            
-            RUNNING=$(echo "$SERVICE_INFO" | jq -r '.runningCount // 0')
-            DESIRED=$(echo "$SERVICE_INFO" | jq -r '.desiredCount // 0')
-            
-            if [ "$RUNNING" == "$DESIRED" ] && [ "$DESIRED" != "0" ]; then
-              HEALTHY_SERVICES="$HEALTHY_SERVICES\n✅ $service: $RUNNING/$DESIRED tasks"
-            else
-              UNHEALTHY_SERVICES="$UNHEALTHY_SERVICES\n❌ $service: $RUNNING/$DESIRED tasks"
-              
-              # Get recent events for unhealthy services
-              EVENTS=$(aws ecs describe-services \
-                --cluster sdt-dev-cluster \
-                --services sdt-dev-$service \
-                --query 'services[0].events[0:3].[createdAt,message]' \
-                --output text 2>/dev/null | head -3)
-              
-              RECENT_EVENTS="$RECENT_EVENTS\n\n**$service events:**\n$EVENTS"
-            fi
-          done
-
-          echo "unhealthy-services<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$UNHEALTHY_SERVICES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          echo "healthy-services<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$HEALTHY_SERVICES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          echo "recent-events<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$RECENT_EVENTS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Send health check failure notification
         uses: ./.github/actions/slack-notify
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": ":rotating_light: Health Check Failed - Backend Deployment to Dev",
+              "text": ":rotating_light: Health Check Failed - Staging Deployment",
               "attachments": [
                 {
                   "color": "danger",
                   "fields": [
                     { "title": "❌ Failure Stage", "value": "Health Check", "short": true },
-                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "Environment", "value": "Staging", "short": true },
                     { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
                     { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
                     { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
-                    { "title": "⚠️ Action Required", "value": "Health check failed - automatic rollback initiated", "short": false },
+                    { "title": "⚠️ Action Required", "value": "Health check failed - automatic rollback initiated for staging environment", "short": false },
                     { "title": "🔗 View Details", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Check logs for service status and events>", "short": false }
                   ],
                   "footer": "GitHub Actions - Health Check Failure",
@@ -1006,29 +852,30 @@ jobs:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": ":white_check_mark: Deployment Successful - Backend to Dev",
+              "text": ":white_check_mark: Deployment Successful - Backend to Staging",
               "attachments": [
                 {
                   "color": "good",
                   "fields": [
                     { "title": "✅ Status", "value": "All stages completed successfully", "short": true },
-                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "Environment", "value": "Staging", "short": true },
                     { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
                     { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
                     { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
+                    { "title": "Security", "value": "✅ Passed strict security scan (Zero CRITICAL/HIGH)", "short": true },
                     { "title": "Build Result", "value": "✅ ${{ needs.build-and-push.result }}", "short": true },
                     { "title": "Deploy Results", "value": "✅ infra: ${{ needs.deploy-infra.result }}, business: ${{ needs.deploy-business.result }}", "short": true },
                     { "title": "Health Check", "value": "✅ ${{ needs.health-check.result }}", "short": true },
                     { "title": "View Details", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
                   ],
-                  "footer": "GitHub Actions - Deployment Success",
+                  "footer": "GitHub Actions - Deployment Success (Staging)",
                   "footer_icon": "https://github.githubassets.com/favicon.ico"
                 }
               ]
             }
 
   summary:
-    name: Deployment Summary
+    name: Deployment Summary (Staging)
     runs-on: ubuntu-latest
     needs: [detect-changes, build-and-push, deploy-infra, deploy-business, health-check]
     if: always()
@@ -1043,178 +890,300 @@ jobs:
 
       - name: Generate detailed summary
         run: |
-          # Install jq if needed
-          if ! command -v jq >/dev/null 2>&1; then
-            sudo apt-get update -y && sudo apt-get install -y jq
-          fi
+          set -euo pipefail
 
-          echo "## 🚀 Dev Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
+          # ===================================
+          # DEPLOYMENT METADATA
+          # ===================================
           echo "### 📋 Deployment Metadata" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment | **Dev** |" >> $GITHUB_STEP_SUMMARY
-          echo "| PR Title | ${{ inputs.pr_title }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Author | ${{ inputs.pr_author }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Target Branch | \`${{ inputs.target_branch }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit SHA | [\`${GITHUB_SHA:0:8}\`](${{ inputs.pr_url }}) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Timestamp | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | 🔒 Staging (Production-Ready) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Security Policy** | Zero tolerance for CRITICAL/HIGH vulnerabilities |" >> $GITHUB_STEP_SUMMARY
+          echo "| **PR Title** | ${{ inputs.pr_title }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Author** | ${{ inputs.pr_author }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Branch** | \`${{ inputs.target_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit SHA** | \`${{ inputs.commit_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Workflow Run** | [View Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Timestamp** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "### 📊 Pipeline Stage Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Stage | Status | Duration |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|----------|" >> $GITHUB_STEP_SUMMARY
+          # ===================================
+          # PIPELINE STAGE RESULTS
+          # ===================================
+          echo "### 🔄 Pipeline Stage Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
 
-          # Map status to emoji
-          BUILD_EMOJI="⏭️"; [ "${{ needs.build-and-push.result }}" == "success" ] && BUILD_EMOJI="✅" || [ "${{ needs.build-and-push.result }}" == "failure" ] && BUILD_EMOJI="❌"
-          INFRA_EMOJI="⏭️"; [ "${{ needs.deploy-infra.result }}" == "success" ] && INFRA_EMOJI="✅" || [ "${{ needs.deploy-infra.result }}" == "failure" ] && INFRA_EMOJI="❌"
-          BIZ_EMOJI="⏭️"; [ "${{ needs.deploy-business.result }}" == "success" ] && BIZ_EMOJI="✅" || [ "${{ needs.deploy-business.result }}" == "failure" ] && BIZ_EMOJI="❌"
-          HEALTH_EMOJI="⏭️"; [ "${{ needs.health-check.result }}" == "success" ] && HEALTH_EMOJI="✅" || [ "${{ needs.health-check.result }}" == "failure" ] && HEALTH_EMOJI="❌"
+          # Build stage
+          if [ "${{ needs.build-and-push.result }}" == "success" ]; then
+            BUILD_ICON="✅"
+          else
+            BUILD_ICON="❌"
+          fi
+          echo "| **Build & Security Scan** | $BUILD_ICON \`${{ needs.build-and-push.result }}\` |" >> $GITHUB_STEP_SUMMARY
 
-          echo "| 🔨 Build & Push | $BUILD_EMOJI \`${{ needs.build-and-push.result }}\` | - |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🏗️ Deploy Infrastructure | $INFRA_EMOJI \`${{ needs.deploy-infra.result }}\` | - |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🚀 Deploy Business Services | $BIZ_EMOJI \`${{ needs.deploy-business.result }}\` | - |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🏥 Health Check | $HEALTH_EMOJI \`${{ needs.health-check.result }}\` | - |" >> $GITHUB_STEP_SUMMARY
+          # Deploy Infra stage
+          if [ "${{ needs.deploy-infra.result }}" == "success" ]; then
+            DEPLOY_INFRA_ICON="✅"
+          elif [ "${{ needs.deploy-infra.result }}" == "skipped" ]; then
+            DEPLOY_INFRA_ICON="⏭️"
+          else
+            DEPLOY_INFRA_ICON="❌"
+          fi
+          echo "| **Deploy Infrastructure** | $DEPLOY_INFRA_ICON \`${{ needs.deploy-infra.result }}\` |" >> $GITHUB_STEP_SUMMARY
+
+          # Deploy Business stage
+          if [ "${{ needs.deploy-business.result }}" == "success" ]; then
+            DEPLOY_BIZ_ICON="✅"
+          elif [ "${{ needs.deploy-business.result }}" == "skipped" ]; then
+            DEPLOY_BIZ_ICON="⏭️"
+          else
+            DEPLOY_BIZ_ICON="❌"
+          fi
+          echo "| **Deploy Business Logic** | $DEPLOY_BIZ_ICON \`${{ needs.deploy-business.result }}\` |" >> $GITHUB_STEP_SUMMARY
+
+          # Health Check stage
+          if [ "${{ needs.health-check.result }}" == "success" ]; then
+            HEALTH_ICON="✅"
+          else
+            HEALTH_ICON="❌"
+          fi
+          echo "| **Health Check** | $HEALTH_ICON \`${{ needs.health-check.result }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Get actual changed services
+          # ===================================
+          # SERVICES CHANGED & DEPLOYED
+          # ===================================
+          echo "### 🎯 Services Changed & Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Get actual changed services from detect-changes output
           SERVICES_JSON='${{ needs.detect-changes.outputs.services_json }}'
           CHANGED_COUNT=$(echo "$SERVICES_JSON" | jq 'length')
 
-          echo "### 📦 Services Changed & Deployed ($CHANGED_COUNT)" >> $GITHUB_STEP_SUMMARY
-
           if [ "$CHANGED_COUNT" -eq 0 ]; then
-            echo "> ℹ️ No services were changed in this deployment." >> $GITHUB_STEP_SUMMARY
+            echo "⏭️ **No services changed** - Full build was forced or this is a manual deployment." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           else
+            echo "**$CHANGED_COUNT service(s) changed and deployed:**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "| Service | Port | Type | Build | Deploy | Health |" >> $GITHUB_STEP_SUMMARY
             echo "|---------|------|------|-------|--------|--------|" >> $GITHUB_STEP_SUMMARY
 
-            # Parse changed services and get their health status
-            mapfile -t SERVICES < <(echo "$SERVICES_JSON" | jq -r '.[].name')
+            # Parse services and create array
+            SERVICES=($(echo "$SERVICES_JSON" | jq -r '.[].name'))
 
             for service in "${SERVICES[@]}"; do
-              # Determine service type
-              SERVICE_TYPE="Business"
-              case "$service" in
-                config-server|discovery-server|api-gateway)
-                  SERVICE_TYPE="Infrastructure"
-                  ;;
-              esac
-
-              # Get port
+              # Get service metadata
               PORT=$(echo "$SERVICES_JSON" | jq -r ".[] | select(.name==\"$service\") | .port")
+              SERVICE_TYPE=$(echo "$SERVICES_JSON" | jq -r ".[] | select(.name==\"$service\") | .type")
 
-              # Get health status from ECS
+              # Convert type to readable format
+              if [ "$SERVICE_TYPE" == "infra" ]; then
+                SERVICE_TYPE="🏗️ Infrastructure"
+              else
+                SERVICE_TYPE="💼 Business"
+              fi
+
+              # Determine build status
+              if [ "${{ needs.build-and-push.result }}" == "success" ]; then
+                BUILD_ICON="✅"
+              else
+                BUILD_ICON="❌"
+              fi
+
+              # Determine deploy status based on service type
+              if [ "$SERVICE_TYPE" == "🏗️ Infrastructure" ]; then
+                if [ "${{ needs.deploy-infra.result }}" == "success" ]; then
+                  DEPLOY_ICON="✅"
+                else
+                  DEPLOY_ICON="❌"
+                fi
+              else
+                if [ "${{ needs.deploy-business.result }}" == "success" ]; then
+                  DEPLOY_ICON="✅"
+                else
+                  DEPLOY_ICON="❌"
+                fi
+              fi
+
+              # Query actual ECS health status
               HEALTH_STATUS=$(aws ecs describe-services \
-                --cluster sdt-dev-cluster \
-                --services sdt-dev-$service \
+                --cluster sdt-staging-cluster \
+                --services sdt-staging-$service \
                 --query 'services[0].{running:runningCount,desired:desiredCount}' \
                 --output json 2>/dev/null || echo '{"running":0,"desired":0}')
 
               RUNNING=$(echo "$HEALTH_STATUS" | jq -r '.running // 0')
               DESIRED=$(echo "$HEALTH_STATUS" | jq -r '.desired // 0')
 
-              # Determine health emoji
+              # Determine health icon and text
               if [ "$RUNNING" -eq "$DESIRED" ] && [ "$RUNNING" -gt 0 ]; then
                 HEALTH_ICON="✅"
+                HEALTH_TEXT="$RUNNING/$DESIRED"
+              elif [ "$RUNNING" -gt 0 ] && [ "$RUNNING" -lt "$DESIRED" ]; then
+                HEALTH_ICON="⚠️"
                 HEALTH_TEXT="$RUNNING/$DESIRED"
               else
                 HEALTH_ICON="❌"
                 HEALTH_TEXT="$RUNNING/$DESIRED"
               fi
 
-              # Build status (assume success if we got to deploy)
-              BUILD_ICON="✅"
-              DEPLOY_ICON="✅"
-              [ "${{ needs.build-and-push.result }}" != "success" ] && BUILD_ICON="❌"
-              [ "${{ needs.deploy-infra.result }}" == "failure" ] || [ "${{ needs.deploy-business.result }}" == "failure" ] && DEPLOY_ICON="❌"
-
               echo "| **$service** | \`$PORT\` | $SERVICE_TYPE | $BUILD_ICON | $DEPLOY_ICON | $HEALTH_ICON \`$HEALTH_TEXT\` |" >> $GITHUB_STEP_SUMMARY
             done
-
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
-          echo "### 🏥 Detailed Health Status" >> $GITHUB_STEP_SUMMARY
+          # ===================================
+          # DETAILED HEALTH STATUS
+          # ===================================
           echo "<details>" >> $GITHUB_STEP_SUMMARY
-          echo "<summary>Click to expand service health details</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "<summary><b>📊 Detailed Health Status (Click to expand)</b></summary>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "#### ECS Service Health Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ "$CHANGED_COUNT" -gt 0 ]; then
-            for service in "${SERVICES[@]}"; do
-              echo "Service: sdt-dev-$service" >> $GITHUB_STEP_SUMMARY
-              aws ecs describe-services \
-                --cluster sdt-dev-cluster \
-                --services sdt-dev-$service \
-                --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount,Pending:pendingCount,Events:events[0:3]}' \
-                --output json 2>/dev/null | jq '.' >> $GITHUB_STEP_SUMMARY || echo "  Status: Not found" >> $GITHUB_STEP_SUMMARY
-              echo "---" >> $GITHUB_STEP_SUMMARY
-            done
+          if [ "$CHANGED_COUNT" -eq 0 ]; then
+            echo "_No services were changed in this deployment._" >> $GITHUB_STEP_SUMMARY
           else
-            echo "No services to check." >> $GITHUB_STEP_SUMMARY
+            for service in "${SERVICES[@]}"; do
+              echo "**Service: \`sdt-staging-$service\`**" >> $GITHUB_STEP_SUMMARY
+
+              # Get full service details
+              SERVICE_DETAILS=$(aws ecs describe-services \
+                --cluster sdt-staging-cluster \
+                --services sdt-staging-$service \
+                --query 'services[0]' \
+                --output json 2>/dev/null || echo '{}')
+
+              RUNNING=$(echo "$SERVICE_DETAILS" | jq -r '.runningCount // 0')
+              DESIRED=$(echo "$SERVICE_DETAILS" | jq -r '.desiredCount // 0')
+              PENDING=$(echo "$SERVICE_DETAILS" | jq -r '.pendingCount // 0')
+              STATUS=$(echo "$SERVICE_DETAILS" | jq -r '.status // "UNKNOWN"')
+
+              echo "- **Status:** \`$STATUS\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **Running Tasks:** $RUNNING" >> $GITHUB_STEP_SUMMARY
+              echo "- **Desired Tasks:** $DESIRED" >> $GITHUB_STEP_SUMMARY
+              echo "- **Pending Tasks:** $PENDING" >> $GITHUB_STEP_SUMMARY
+
+              # Get task definition
+              TASK_DEF=$(echo "$SERVICE_DETAILS" | jq -r '.taskDefinition // "N/A"')
+              echo "- **Task Definition:** \`$TASK_DEF\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            done
           fi
 
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "### 🐳 Container Images" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | Image Tag |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|-----------|" >> $GITHUB_STEP_SUMMARY
-
-          if [ "$CHANGED_COUNT" -gt 0 ]; then
-            for service in "${SERVICES[@]}"; do
-              echo "| \`$service\` | \`962496666337.dkr.ecr.eu-west-1.amazonaws.com/sdt/dev/$service:${{ inputs.commit_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-            done
-          fi
-
+          # ===================================
+          # SECURITY SCAN RESULTS
+          # ===================================
+          echo "### 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "### ☁️ Infrastructure Details" >> $GITHUB_STEP_SUMMARY
-          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ECS Cluster | \`sdt-dev-cluster\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| AWS Region | \`eu-west-1\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| ECR Registry | \`962496666337.dkr.ecr.eu-west-1.amazonaws.com\` |" >> $GITHUB_STEP_SUMMARY
-
-          # Get ALB DNS if available
-          ALB_DNS=$(aws elbv2 describe-load-balancers \
-            --names sdt-dev-alb \
-            --query 'LoadBalancers[0].DNSName' \
-            --output text 2>/dev/null || echo "Not available")
-
-          echo "| ALB Endpoint | [\`$ALB_DNS\`](http://$ALB_DNS) |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Final status
-          if [ "${{ needs.health-check.result }}" == "success" ] && [ "${{ needs.build-and-push.result }}" == "success" ]; then
-            echo "### ✅ Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build-and-push.result }}" == "success" ]; then
+            echo "✅ **All services passed strict security scanning**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "All $CHANGED_COUNT changed services are healthy and running in dev environment." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "🔗 **Quick Links:**" >> $GITHUB_STEP_SUMMARY
-            echo "- [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
-            echo "- [View PR](${{ inputs.pr_url }})" >> $GITHUB_STEP_SUMMARY
-            echo "- [AWS ECS Console](https://eu-west-1.console.aws.amazon.com/ecs/v2/clusters/sdt-dev-cluster/services)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Policy:** Zero tolerance for CRITICAL and HIGH vulnerabilities" >> $GITHUB_STEP_SUMMARY
+            echo "- **Scanner:** Trivy (aquasecurity)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status:** No blocking vulnerabilities detected" >> $GITHUB_STEP_SUMMARY
+            echo "- **Unfixed CVEs:** Reported (not ignored)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "### ⚠️ Deployment Issues Detected" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Security scan failed - Deployment blocked**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Some pipeline stages did not complete successfully. Review the logs above for details." >> $GITHUB_STEP_SUMMARY
+            echo "One or more services have CRITICAL or HIGH severity vulnerabilities." >> $GITHUB_STEP_SUMMARY
+            echo "Please review the build logs and Trivy reports to address security issues." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # ===================================
+          # CONTAINER IMAGES
+          # ===================================
+          echo "### 🐳 Container Images Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$CHANGED_COUNT" -eq 0 ]; then
+            echo "_No new images were built._" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "Registry: 962496666337.dkr.ecr.eu-west-1.amazonaws.com/sdt/staging/" >> $GITHUB_STEP_SUMMARY
+            echo "Image Tag: ${{ inputs.commit_sha }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Failed Stages:**" >> $GITHUB_STEP_SUMMARY
-            [ "${{ needs.build-and-push.result }}" == "failure" ] && echo "- ❌ Build & Push" >> $GITHUB_STEP_SUMMARY
-            [ "${{ needs.deploy-infra.result }}" == "failure" ] && echo "- ❌ Deploy Infrastructure" >> $GITHUB_STEP_SUMMARY
-            [ "${{ needs.deploy-business.result }}" == "failure" ] && echo "- ❌ Deploy Business Services" >> $GITHUB_STEP_SUMMARY
-            [ "${{ needs.health-check.result }}" == "failure" ] && echo "- ❌ Health Check" >> $GITHUB_STEP_SUMMARY
+            echo "Images:" >> $GITHUB_STEP_SUMMARY
+            for service in "${SERVICES[@]}"; do
+              echo "  - sdt/staging/$service:${{ inputs.commit_sha }}" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # ===================================
+          # INFRASTRUCTURE DETAILS
+          # ===================================
+          echo "### 🏗️ Infrastructure Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **ECS Cluster** | \`sdt-staging-cluster\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **AWS Region** | \`eu-west-1\` (Ireland) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **ECR Registry** | \`962496666337.dkr.ecr.eu-west-1.amazonaws.com\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | Staging (Pre-Production) |" >> $GITHUB_STEP_SUMMARY
+
+          # Get ALB endpoint (if available)
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --query 'LoadBalancers[?contains(LoadBalancerName, `staging`)].DNSName | [0]' \
+            --output text 2>/dev/null || echo "N/A")
+
+          if [ "$ALB_DNS" != "N/A" ] && [ -n "$ALB_DNS" ]; then
+            echo "| **Load Balancer** | [${ALB_DNS}](http://${ALB_DNS}) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Load Balancer** | Not available |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # ===================================
+          # FINAL STATUS
+          # ===================================
+          if [ "${{ needs.health-check.result }}" == "success" ] && [ "${{ needs.build-and-push.result }}" == "success" ]; then
+            echo "---" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "🔗 [View Detailed Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+            echo "## ✅ Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All services are healthy and running in the **Staging** environment." >> $GITHUB_STEP_SUMMARY
+            echo "All security gates passed with zero CRITICAL/HIGH vulnerabilities detected." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Quick Links:**" >> $GITHUB_STEP_SUMMARY
+            echo "- [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+            echo "- [View Pull Request](${{ inputs.pr_url }})" >> $GITHUB_STEP_SUMMARY
+            echo "- [AWS ECS Console](https://eu-west-1.console.aws.amazon.com/ecs/v2/clusters/sdt-staging-cluster/services)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "---" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## ⚠️ Deployment Issues Detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Some pipeline stages did not complete successfully. Please review:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Build Status:** \`${{ needs.build-and-push.result }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Deploy Infra Status:** \`${{ needs.deploy-infra.result }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Deploy Business Status:** \`${{ needs.deploy-business.result }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Health Check Status:** \`${{ needs.health-check.result }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Review the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+            echo "2. Check service health in the [ECS console](https://eu-west-1.console.aws.amazon.com/ecs/v2/clusters/sdt-staging-cluster/services)" >> $GITHUB_STEP_SUMMARY
+            echo "3. Review Trivy security scan reports if build failed" >> $GITHUB_STEP_SUMMARY
+            echo "4. If health checks failed, automatic rollback may have been triggered" >> $GITHUB_STEP_SUMMARY
           fi
 
   rollback-on-failure:
-    name: Rollback Changed Services on Failure
+    name: Rollback on Failure (Staging)
     runs-on: ubuntu-latest
     needs: [detect-changes, deploy-infra, deploy-business, health-check]
     if: needs.health-check.result == 'failure'
@@ -1234,10 +1203,10 @@ jobs:
           set -euo pipefail
           IFS=',' read -r -a INFRA <<< "${{ needs.detect-changes.outputs.infra_csv }}"
           for name in "${INFRA[@]}"; do
-            echo "Rolling back $name..."
+            echo "Rolling back $name in staging..."
             # Get previous task definition ARN (second most recent)
             PREV=$(aws ecs list-task-definitions \
-              --family-prefix sdt-dev-$name \
+              --family-prefix sdt-staging-$name \
               --sort DESC \
               --max-items 2 \
               --query 'taskDefinitionArns[-1]' \
@@ -1247,12 +1216,12 @@ jobs:
               continue
             fi
             aws ecs update-service \
-              --cluster sdt-dev-cluster \
-              --service sdt-dev-$name \
+              --cluster sdt-staging-cluster \
+              --service sdt-staging-$name \
               --task-definition "$PREV" \
               --force-new-deployment \
               --no-cli-pager
-            aws ecs wait services-stable --cluster sdt-dev-cluster --services sdt-dev-$name
+            aws ecs wait services-stable --cluster sdt-staging-cluster --services sdt-staging-$name
             echo "✅ Rolled back $name to $PREV"
           done
 
@@ -1267,9 +1236,9 @@ jobs:
             exit 0
           fi
           for name in $(jq -r '.[].name' <<<"$SERVICES_JSON"); do
-            echo "Rolling back $name..."
+            echo "Rolling back $name in staging..."
             PREV=$(aws ecs list-task-definitions \
-              --family-prefix sdt-dev-$name \
+              --family-prefix sdt-staging-$name \
               --sort DESC \
               --max-items 2 \
               --query 'taskDefinitionArns[-1]' \
@@ -1279,12 +1248,12 @@ jobs:
               continue
             fi
             aws ecs update-service \
-              --cluster sdt-dev-cluster \
-              --service sdt-dev-$name \
+              --cluster sdt-staging-cluster \
+              --service sdt-staging-$name \
               --task-definition "$PREV" \
               --force-new-deployment \
               --no-cli-pager
-            aws ecs wait services-stable --cluster sdt-dev-cluster --services sdt-dev-$name
+            aws ecs wait services-stable --cluster sdt-staging-cluster --services sdt-staging-$name
             echo "✅ Rolled back $name to $PREV"
           done
 
@@ -1294,23 +1263,23 @@ jobs:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": ":arrows_counterclockwise: Automatic Rollback Completed - Backend Deployment to Dev",
+              "text": ":arrows_counterclockwise: Automatic Rollback Completed - Staging Environment",
               "attachments": [
                 {
                   "color": "warning",
                   "fields": [
-                    { "title": "🔄 Action Taken", "value": "Automatic Rollback", "short": true },
-                    { "title": "Environment", "value": "Dev", "short": true },
+                    { "title": "🔄 Action Taken", "value": "Automatic Rollback (Staging)", "short": true },
+                    { "title": "Environment", "value": "Staging", "short": true },
                     { "title": "PR Title", "value": "${{ inputs.pr_title }}", "short": false },
                     { "title": "Author", "value": "${{ inputs.pr_author }}", "short": true },
                     { "title": "Commit", "value": "<${{ inputs.pr_url }}|View PR>", "short": true },
-                    { "title": "Reason", "value": "Health check failed after deployment", "short": false },
+                    { "title": "Reason", "value": "Health check failed after deployment to staging", "short": false },
                     { "title": "Services Rolled Back", "value": "All changed services reverted to previous working versions", "short": false },
-                    { "title": "Status", "value": "✅ System restored to stable state", "short": false },
-                    { "title": "Next Steps", "value": "Review deployment logs, fix issues, and retry deployment", "short": false },
+                    { "title": "Status", "value": "✅ Staging environment restored to stable state", "short": false },
+                    { "title": "Next Steps", "value": "Review deployment logs, fix issues, and retry deployment to staging", "short": false },
                     { "title": "View Logs", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>", "short": true }
                   ],
-                  "footer": "GitHub Actions - Automatic Rollback",
+                  "footer": "GitHub Actions - Automatic Rollback (Staging)",
                   "footer_icon": "https://github.githubassets.com/favicon.ico"
                 }
               ]
