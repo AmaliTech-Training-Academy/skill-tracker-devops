@@ -2,7 +2,7 @@
 
 This repository contains the Terraform infrastructure code for the Skills Development Tracker (SDT) application, deployed on AWS using a microservices architecture.
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 - **Region**: us-east-1
 - **Compute**: Amazon ECS (Fargate) with auto-scaling
@@ -14,7 +14,7 @@ This repository contains the Terraform infrastructure code for the Skills Develo
 - **Monitoring**: CloudWatch dashboards, metrics, and alarms
 - **Container Registry**: Amazon ECR
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 infrastructure/
@@ -35,7 +35,7 @@ infrastructure/
 └── README.md
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -78,7 +78,7 @@ infrastructure/
    make apply ENV=dev
    ```
 
-## 🔧 Usage
+## Usage
 
 ### Using Make Commands
 
@@ -126,7 +126,7 @@ terraform output
 terraform destroy
 ```
 
-## 🌍 Environments
+## Environments
 
 ### Development (dev)
 - **VPC CIDR**: 10.0.0.0/16
@@ -153,7 +153,7 @@ terraform destroy
 - **Read Replica**: Yes
 - **Monitoring**: Full monitoring with VPC Flow Logs, X-Ray
 
-## 📦 Services
+## Services
 
 The infrastructure supports four microservices and an Angular frontend:
 
@@ -171,7 +171,7 @@ Each service has its own:
 - CloudWatch log group
 - Auto-scaling configuration
 
-## 🔐 Security
+## Security
 
 - **Encryption at rest**: All RDS and S3 resources encrypted
 - **Encryption in transit**: SSL/TLS enforced
@@ -180,7 +180,7 @@ Each service has its own:
 - **IAM**: Least-privilege roles for all services
 - **Security groups**: Restrictive ingress/egress rules
 
-## 📊 Monitoring & Alarms
+## Monitoring & Alarms
 
 CloudWatch alarms configured for:
 - ECS CPU/Memory utilization
@@ -191,7 +191,7 @@ CloudWatch alarms configured for:
 - ALB 5XX errors
 - ALB response time
 
-## 🔄 CI/CD Integration
+## CI/CD Integration
 
 The infrastructure is designed to integrate with CI/CD pipelines:
 
@@ -220,7 +220,7 @@ aws ecs update-service \
   --force-new-deployment
 ```
 
-## 📝 Outputs
+## Outputs
 
 After applying, you'll get important outputs:
 
@@ -238,7 +238,7 @@ Key outputs include:
 - **s3_buckets**: S3 bucket names
 - **amplify_app_url**: Frontend application URL
 
-## 🔄 State Management
+## State Management
 
 Terraform state is stored in:
 - **S3 Bucket**: `sdt-terraform-state`
@@ -251,7 +251,7 @@ State file paths:
 - Staging: `envs/staging/terraform.tfstate`
 - Production: `envs/production/terraform.tfstate`
 
-## 🧪 Testing Changes
+## Testing Changes
 
 1. Always test in `dev` first
 2. Plan changes carefully: `make plan ENV=dev`
@@ -260,7 +260,7 @@ State file paths:
 5. Verify outputs and resources
 6. Promote to staging, then production
 
-## 🆘 Troubleshooting
+## Troubleshooting
 
 ### Issue: Backend initialization fails
 
@@ -286,7 +286,7 @@ cd envs/dev
 terraform force-unlock <lock-id>
 ```
 
-## 🔒 Best Practices
+## Best Practices
 
 1. **Never commit secrets**: Use environment variables or AWS Secrets Manager
 2. **Review plans**: Always run `plan` before `apply`
