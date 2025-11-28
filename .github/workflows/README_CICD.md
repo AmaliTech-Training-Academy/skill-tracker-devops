@@ -1,12 +1,12 @@
 # Backend CI/CD Pipeline
 
-## 🎯 Overview
+## Overview
 
 This CI/CD pipeline uses a **trigger-and-dispatch** pattern to deploy backend microservices from feature branches to the dev environment.
 
 ---
 
-## 🏗️ Architecture
+## 🏗Architecture
 
 ```
 Backend Repository (PR Merged)
@@ -50,17 +50,17 @@ DevOps Repository
 
 ---
 
-## 📦 What Was Implemented (Sprint 1)
+## What Was Implemented (Sprint 1)
 
-### ✅ **1. ECS Deployment** (`deploy-to-ecs` job)
+### **1. ECS Deployment** (`deploy-to-ecs` job)
 
 **Features:**
 
-- ✅ Priority-based deployment (infrastructure services first)
-- ✅ Parallel deployment for business services (max 4 at a time)
-- ✅ Automatic task definition updates with new image tags
-- ✅ Force new deployment to ensure latest images
-- ✅ Wait for service stability before proceeding
+- Priority-based deployment (infrastructure services first)
+- Parallel deployment for business services (max 4 at a time)
+- Automatic task definition updates with new image tags
+- Force new deployment to ensure latest images
+- Wait for service stability before proceeding
 
 **How it works:**
 
@@ -79,14 +79,14 @@ DevOps Repository
 - **Priority 3:** API Gateway (depends on Discovery)
 - **Priority 4:** All business services (can deploy in parallel)
 
-### ✅ **2. Health Checks** (`health-check` job)
+### **2. Health Checks** (`health-check` job)
 
 **Features:**
 
-- ✅ Verifies all 12 services are running
-- ✅ Compares running vs desired task counts
-- ✅ Fails deployment if any service is unhealthy
-- ✅ Retrieves ALB endpoint for testing
+- Verifies all 12 services are running
+- Compares running vs desired task counts
+- Fails deployment if any service is unhealthy
+- Retrieves ALB endpoint for testing
 
 **Services checked:**
 
@@ -105,15 +105,15 @@ DevOps Repository
 12. notification-service
 ```
 
-<!-- ### ✅ **3. Slack Notifications** (`notify-slack` job)
+<!-- ### **3. Slack Notifications** (`notify-slack` job)
 
 **Features:**
 
-- ✅ Rich formatted notifications
-- ✅ Color-coded status (green/red/yellow)
-- ✅ Detailed job results
-- ✅ PR information and author
-- ✅ Links to GitHub PR -->
+- Rich formatted notifications
+- Color-coded status (green/red/yellow)
+- Detailed job results
+- PR information and author
+- Links to GitHub PR -->
 
 **Status determination:**
 
@@ -121,21 +121,21 @@ DevOps Repository
 - **Failed (red):** Build or push failed
 - **Partial (yellow):** Build succeeded but deployment/health check failed
 
-### ✅ **4. Enhanced Summary** (`summary` job)
+### **4. Enhanced Summary** (`summary` job)
 
 **Features:**
 
-- ✅ Comprehensive GitHub Actions summary
-- ✅ Job status table
-- ✅ Service list with ports
-- ✅ ECR registry info
-- ✅ Success/failure message
+- Comprehensive GitHub Actions summary
+- Job status table
+- Service list with ports
+- ECR registry info
+- Success/failure message
 
 ---
 
-## 🔧 Configuration
+## Configuration
 
-### ⚠️ **Important: Repository Setup**
+### ⚠**Important: Repository Setup**
 
 This workflow is designed to:
 
@@ -189,7 +189,7 @@ ECR_REPOSITORY_PREFIX: sdt/dev
 
 ---
 
-## 📊 Workflow Execution Flow
+## Workflow Execution Flow
 
 ### **Timeline (Estimated)**
 
@@ -251,7 +251,7 @@ Deploy (Priority-based):
 
 ---
 
-## 🔍 Monitoring & Debugging
+## Monitoring & Debugging
 
 ### **GitHub Actions UI**
 
@@ -312,7 +312,7 @@ aws ecr describe-images \
 
 ---
 
-## ⚠️ Troubleshooting
+## ⚠Troubleshooting
 
 ### **Issue: Build fails for a service**
 

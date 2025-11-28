@@ -4,11 +4,11 @@ A reusable composite action for running CodeQL security analysis on your codebas
 
 ## Features
 
-- ✅ Supports multiple languages (Java, JavaScript, Python, etc.)
-- ✅ Configurable query suites (security-only, security-and-quality, etc.)
-- ✅ Automatic build detection with CodeQL autobuild
-- ✅ Customizable analysis categories for result organization
-- ✅ Java version configuration for Java projects
+- Supports multiple languages (Java, JavaScript, Python, etc.)
+- Configurable query suites (security-only, security-and-quality, etc.)
+- Automatic build detection with CodeQL autobuild
+- Customizable analysis categories for result organization
+- Java version configuration for Java projects
 
 ## Usage
 

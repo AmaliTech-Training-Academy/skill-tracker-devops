@@ -1,0 +1,5 @@
+# Python Diagrams - Generate architecture diagrams
+diagrams>=0.23.0
+
+# Required for rendering
+graphviz>=0.20.0

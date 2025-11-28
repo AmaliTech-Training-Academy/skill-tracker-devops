@@ -4,12 +4,12 @@ A reusable composite action for scanning Docker images for vulnerabilities using
 
 ## Features
 
-- ✅ Scans Docker images for security vulnerabilities
-- ✅ Configurable severity levels (CRITICAL, HIGH, MEDIUM, LOW)
-- ✅ Multiple output formats (table, json, sarif)
-- ✅ Optional exit on vulnerabilities found
-- ✅ Fast and lightweight
-- ✅ No external dependencies or API keys required
+- Scans Docker images for security vulnerabilities
+- Configurable severity levels (CRITICAL, HIGH, MEDIUM, LOW)
+- Multiple output formats (table, json, sarif)
+- Optional exit on vulnerabilities found
+- Fast and lightweight
+- No external dependencies or API keys required
 
 ## Usage
 
@@ -229,9 +229,9 @@ Security Alert Results Interchange Format for GitHub Security tab.
 |---------|-------|--------|
 | **Scan Target** | Container images | Source code |
 | **Speed** | ⚡ Fast (seconds) | 🐌 Slow (minutes) |
-| **Setup** | ✅ Simple | ❌ Complex |
-| **Dependencies** | ✅ None | ❌ Requires build |
-| **Cross-repo** | ✅ Easy | ❌ Complex |
+| **Setup** | Simple | Complex |
+| **Dependencies** | None | Requires build |
+| **Cross-repo** | Easy | Complex |
 | **Results** | Immediate | Delayed upload |
 | **Best For** | Container security | Code quality |
 

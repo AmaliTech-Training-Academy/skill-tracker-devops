@@ -109,11 +109,11 @@ aws sts get-caller-identity
 
 ## Next Steps
 
-1. ✅ Infrastructure deployed
-2. 📦 Build and push Docker images to ECR
-3. 🚀 Deploy services to ECS
-4. 🎨 Deploy Angular frontend to Amplify
-5. 📊 Check CloudWatch dashboards
+1. Infrastructure deployed
+2. Build and push Docker images to ECR
+3. Deploy services to ECS
+4. Deploy Angular frontend to Amplify
+5. Check CloudWatch dashboards
 6. 🔔 Subscribe to SNS alarm notifications
 
 ## Important URLs
