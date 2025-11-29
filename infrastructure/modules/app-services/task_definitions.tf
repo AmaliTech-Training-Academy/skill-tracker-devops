@@ -688,6 +688,7 @@ resource "aws_ecs_task_definition" "task_service" {
           name      = "OPENAI_API_KEY"
           valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-google-api-key-9hinUM:OPENAI_API_KEY::"
         }
+        
       ]
 
       logConfiguration = {

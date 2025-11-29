@@ -65,8 +65,8 @@ module "ecs" {
   public_subnet_ids            = module.networking.public_subnet_ids
   private_subnet_ids           = module.networking.private_subnet_ids
   container_port               = var.container_port
-  enable_container_insights    = true
-  log_retention_days           = 30
+  enable_container_insights    = false
+  log_retention_days           = 1
   create_alb                   = true
   health_check_path            = "/actuator/health"
   monitoring_security_group_id = module.observability.monitoring_security_group_id
@@ -76,84 +76,84 @@ module "ecs" {
   tags = local.common_tags
   services = {
     api-gateway = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8080
     }
     config-server = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8081
     }
     discovery-server = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8082
     }
     bff-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8083
     }
     user-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8084
     }
     task-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8085
     }
     analytics-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8086
     }
     payment-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8087
     }
     gamification-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8088
     }
     practice-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8089
     }
     feedback-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
       port                = 8090
     }
     notification-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 2
       cpu_target_value    = 70
       memory_target_value = 80
@@ -210,7 +210,7 @@ module "monitoring" {
   alb_target_group_arn = module.ecs.target_group_arn
 
   enable_vpc_flow_logs  = var.enable_vpc_flow_logs
-  log_retention_days    = 30
+  log_retention_days    = 1
   alarm_email_endpoints = var.alarm_email_endpoints
 
   # S3 log export configuration
@@ -277,7 +277,7 @@ module "data_services" {
   rabbitmq_access_point_id = module.efs.rabbitmq_access_point_id
 
   aws_region         = var.aws_region
-  log_retention_days = 30
+  log_retention_days = 1
 
   alb_listener_arn      = module.ecs.alb_listener_arn
   alb_security_group_id = module.ecs.alb_security_group_id
