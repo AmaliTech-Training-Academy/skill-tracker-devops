@@ -95,10 +95,18 @@ variable "custom_domain_name" {
   default     = ""
 }
 
+variable "openai_api_key" {
+  description = "OpenAI API key for AI-powered features"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "google_api_key" {
   description = "Google API key for MCQ generation"
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "enable_log_export_to_s3" {

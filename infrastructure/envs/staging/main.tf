@@ -65,32 +65,32 @@ module "ecs" {
   public_subnet_ids        = module.networking.public_subnet_ids
   private_subnet_ids       = module.networking.private_subnet_ids
   container_port           = var.container_port
-  enable_container_insights = true
-  log_retention_days       = 60
+  enable_container_insights = false
+  log_retention_days       = 1
   create_alb               = true
   health_check_path        = "/health"
 
   services = {
     auth-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 4
       cpu_target_value    = 70
       memory_target_value = 80
     }
     content-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 4
       cpu_target_value    = 70
       memory_target_value = 80
     }
     submission-service = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 4
       cpu_target_value    = 70
       memory_target_value = 80
     }
     sandbox-runner = {
-      min_capacity        = 1
+      min_capacity        = 0
       max_capacity        = 5
       cpu_target_value    = 70
       memory_target_value = 80
@@ -145,7 +145,7 @@ module "monitoring" {
   alb_target_group_arn  = module.ecs.target_group_arn
   
   enable_vpc_flow_logs  = var.enable_vpc_flow_logs
-  log_retention_days    = 60
+  log_retention_days    = 1
   alarm_email_endpoints = var.alarm_email_endpoints
 
   tags = local.common_tags

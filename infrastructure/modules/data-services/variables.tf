@@ -85,8 +85,16 @@ variable "alb_security_group_id" {
   type        = string
 }
 
+variable "openai_api_key" {
+  description = "OpenAI API key for AI-powered features"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "google_api_key" {
   description = "Google API key for MCQ generation"
   type        = string
   sensitive   = true
+  default     = ""
 }

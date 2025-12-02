@@ -688,6 +688,7 @@ resource "aws_ecs_task_definition" "task_service" {
           name      = "OPENAI_API_KEY"
           valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-google-api-key-9hinUM:OPENAI_API_KEY::"
         }
+        
       ]
 
       logConfiguration = {
@@ -1048,10 +1049,6 @@ resource "aws_ecs_task_definition" "feedback_service" {
         value = "update"
       },
       {
-        name  = "OPENAI_API_KEY"
-        value = "dummy-key-for-now"
-      },
-      {
         name  = "SPRING_RABBITMQ_HOST"
         value = "rabbitmq.${var.service_discovery_namespace}"
       },
@@ -1062,6 +1059,10 @@ resource "aws_ecs_task_definition" "feedback_service" {
     ]
 
     secrets = [
+      {
+        name      = "OPENAI_API_KEY"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:962496666337:secret:sdt-dev-google-api-key-9hinUM:OPENAI_API_KEY::"
+      },
       {
         name      = "POSTGRES_USER"
         valueFrom = "${var.rds_secret_arn}:username::"
