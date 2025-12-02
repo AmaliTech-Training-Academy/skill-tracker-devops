@@ -282,6 +282,7 @@ module "data_services" {
   alb_listener_arn      = module.ecs.alb_listener_arn
   alb_security_group_id = module.ecs.alb_security_group_id
 
+  openai_api_key = var.openai_api_key
   google_api_key = var.google_api_key
 
   tags = local.common_tags

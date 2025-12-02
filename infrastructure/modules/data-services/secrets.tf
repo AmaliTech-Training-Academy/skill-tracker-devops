@@ -62,6 +62,7 @@ resource "aws_secretsmanager_secret" "google_api_key" {
 resource "aws_secretsmanager_secret_version" "google_api_key" {
   secret_id = aws_secretsmanager_secret.google_api_key.id
   secret_string = jsonencode({
-    OPENAI_API_KEY = var.google_api_key
+    OPENAI_API_KEY = var.openai_api_key
+    GOOGLE_API_KEY = var.google_api_key
   })
 }

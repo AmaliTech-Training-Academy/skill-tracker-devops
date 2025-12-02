@@ -2,23 +2,25 @@
 
 Complete infrastructure and DevOps automation for the Skill Tracker platform - a microservices-based application with 8 active services deployed on AWS ECS Fargate.
 
+![SDT Architecture](diagrams/SDT_Architecture_Diagram.png)
+
 ## Documentation
 
 **Start Here**: [Documentation Index](Docs/DocumentationIndex.md)
 
 ### Quick Links
 
-| Document | Purpose |
-|----------|---------|
-| [Documentation Index](Docs/DocumentationIndex.md) | Complete documentation guide |
-| [Frontend Guide](Docs/FrontendDocs.md) | Angular app, Amplify, CloudFront |
-| [Backend Guide](Docs/BackendDocs.md) | 8 microservices architecture |
-| [DevOps Guide](Docs/DevOpsDocs.md) | CI/CD, monitoring, deployment |
-| [Diagrams](Docs/DiagramsDocs.md) | Visual architecture diagrams |
-| [Quick Reference](Docs/QuickReferenceDocs.md) | Essential commands and operations |
-| [Changelog](Docs/ChangelogDocs.md) | Version history and updates |
-| [Architecture](infrastructure/ARCHITECTURE.md) | System design and decisions |
-| [Infrastructure README](infrastructure/README.md) | Terraform setup and usage |
+| Document                                          | Purpose                           | 
+| ------------------------------------------------- | --------------------------------- |
+| [Documentation Index](Docs/DocumentationIndex.md) | Complete documentation guide      |
+| [Frontend Guide](Docs/FrontendDocs.md)            | Angular app, Amplify, CloudFront  |
+| [Backend Guide](Docs/BackendDocs.md)              | 8 microservices architecture      |
+| [DevOps Guide](Docs/DevOpsDocs.md)                | CI/CD, monitoring, deployment     |
+| [Diagrams](Docs/DiagramsDocs.md)                  | Visual architecture diagrams      |
+| [Quick Reference](Docs/QuickReferenceDocs.md)     | Essential commands and operations |
+| [Changelog](Docs/ChangelogDocs.md)                | Version history and updates       |
+| [Architecture](infrastructure/ARCHITECTURE.md)    | System design and decisions       |
+| [Infrastructure README](infrastructure/README.md) | Terraform setup and usage         |
 
 ## Quick Start
 
